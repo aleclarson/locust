@@ -1,12 +1,12 @@
 var command, minimist, printCommandList;
 
-require("./global");
+require("./Global");
 
-lotus.File = require("./File");
+lotus.Plugin = require("./Plugin");
 
 lotus.Module = require("./Module");
 
-lotus.Plugin = require("./Plugin");
+lotus.File = require("./File");
 
 minimist = require("minimist");
 
@@ -71,17 +71,16 @@ Q["try"](function() {
 }).done();
 
 printCommandList = function() {
-  var commands, i, len;
+  var commands;
   commands = Object.keys(lotus.Plugin.commands);
   log.moat(1);
   log.green("Available commands:");
   log.plusIndent(2);
-  for (i = 0, len = commands.length; i < len; i++) {
-    command = commands[i];
-    log.moat(1);
+  sync.each(commands, function(command) {
+    log.moat(0);
     log.gray.dim("lotus ");
-    log.white(command);
-  }
+    return log.white(command);
+  });
   log.popIndent();
   return log.moat(1);
 };

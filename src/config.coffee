@@ -1,78 +1,82 @@
 
 require "coffee-script/register"
 
-{ isType, isKind, assert, assertType } = require "type-utils"
+{ isType, assert, assertType } = require "type-utils"
 
-KeyMirror = require "keymirror"
-Factory = require "factory"
-combine = require "combine"
 syncFs = require "io/sync"
-define = require "define"
 steal = require "steal"
+Type = require "Type"
 sync = require "sync"
-Path = require "path"
-log = require "lotus-log"
-Q = require "q"
 
 Plugin = require "./Plugin"
 
-module.exports =
-Config = Factory "Lotus_Config",
+type = Type "Lotus_Config"
 
-  initArguments: (dir) ->
+type.argumentTypes =
+  dir: String.Maybe
 
-    dir = "." unless dir
+type.initInstance (dir) ->
 
-    assertType dir, String
+  dir = "." unless dir
 
-    assert (syncFs.isDir dir), {
-      reason: "Lotus.Config() must be passed a directory!"
-      dir
-    }
+  assert syncFs.isDir(dir),
+    reason: "Expected an existing directory!"
+    dir: dir
 
-    [ dir ]
+  path = dir + "/lotus-config.coffee"
 
-  init: (dir) ->
+  if syncFs.isFile path
+    json = module.optional path, (error) ->
+      log.moat 1
+      log.white "Failed to require: "
+      log.red path
+      log.moat 1
+      log.gray.dim error.stack
+      log.moat 1
 
-    path = dir + "/lotus-config.coffee"
+  unless json
+
+    path = dir + "/package.json"
 
     if syncFs.isFile path
-      json = module.optional path, @handleLoadError
+      json = module.optional path, (error) ->
+        log.moat 1
+        log.white "Failed to require: "
+        log.red path
+        log.moat 1
+        log.gray.dim error.stack
+        log.moat 1
+      json = json.lotus if json
+      json = {} unless json
 
-    unless json
+  assert isType(json, Object),
+    reason: "Failed to find configuration file!"
+    dir: dir
+    path: path
 
-      path = dir + "/package.json"
+  Config.fromJSON.call this, path, json
 
-      if syncFs.isFile path
-        json = module.optional path, @handleLoadError
-        json = json.lotus if json
-        json = {} unless json
+type.defineMethods
 
-    assert (isType json, Object), {
-      reason: "Lotus.Config() failed to find valid configuration!"
-      dir
-      path
-    }
-
-    Config.fromJSON.call this, path, json
-
-  handleLoadError: (error) ->
+  _onRequireError: (error) ->
     throw error if error.code isnt "REQUIRE_FAILED"
 
-  statics:
+type.defineStatics
 
-    fromJSON: (path, json) ->
+  fromJSON: (path, json) ->
 
-      unless this instanceof Config
-        config = Object.create Config.prototype
-        return Config.fromJSON.call config, path, json
+    unless this instanceof Config
+      config = Object.create Config.prototype
+      return Config.fromJSON.call config, path, json
 
-      plugins = json.plugins ?= []
-      try assertType plugins, Array.Maybe
-      catch error then repl.sync (c) => eval c
+    plugins = json.plugins ?= []
+    try assertType plugins, Array.Maybe
+    catch error then repl.sync (c) => eval c
 
-      @path = path
-      @plugins = plugins
-      @implicitDependencies = steal json, "implicitDependencies"
-      @json = json
-      return this
+    @path = path
+    @plugins = plugins
+    @implicitDependencies = steal json, "implicitDependencies"
+    @json = json
+    return this
+
+module.exports = Config = type.build()

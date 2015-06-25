@@ -1,12 +1,10 @@
-var Factory, Path, Q, SortedArray, assert, asyncFs, didExit, emptyFunction, inArray, log, sync, syncFs;
+var Path, Q, SortedArray, Type, assert, asyncFs, didExit, emptyFunction, inArray, log, sync, syncFs, type;
 
 assert = require("type-utils").assert;
 
 emptyFunction = require("emptyFunction");
 
 SortedArray = require("sorted-array");
-
-Factory = require("factory");
 
 didExit = require("exit");
 
@@ -16,22 +14,27 @@ asyncFs = require("io/async");
 
 syncFs = require("io/sync");
 
+Type = require("Type");
+
 Path = require("path");
 
 sync = require("sync");
 
-log = require("lotus-log");
+log = require("log");
 
 Q = require("q");
 
-module.exports = Factory("Lotus_Cache", {
-  initValues: function(path) {
-    return {
-      path: path,
-      isDirty: false,
-      _watcher: null
-    };
+type = Type("Lotus_Cache");
+
+type.defineValues({
+  path: function(path) {
+    return path;
   },
+  isDirty: false,
+  _watcher: null
+});
+
+type.defineMethods({
   load: function(options) {
     var error, startTime;
     if (options == null) {
@@ -246,5 +249,7 @@ module.exports = Factory("Lotus_Cache", {
     });
   }
 });
+
+module.exports = type.build();
 
 //# sourceMappingURL=../../map/src/Cache.map

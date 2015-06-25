@@ -2,13 +2,19 @@
 lotus = require "./index"
 lotus.forceAll = yes
 
-log = require "lotus-log"
-# log.clear()
-log.indent = 2
-log.moat 1
+require "failure/global"
+
+# These classes inject themselves into the Property class.
+require "lazy-var"
+require "reactive-var"
 
 combine = require "combine"
 define = require "define"
+
+log = require "log"
+# log.clear()
+log.indent = 2
+log.moat 1
 
 combine global, {
   log
@@ -24,5 +30,5 @@ combine global, props for props in [
 ]
 
 define global, {
-  repl: lazy: -> require "lotus-repl"
+  repl: lazy: -> require "repl"
 }
