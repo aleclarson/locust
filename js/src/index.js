@@ -16,7 +16,7 @@
           return require("lotus-log");
         }
       },
-      Package: require("./package"),
+      Module: require("./module"),
       File: require("./file")
     });
   });

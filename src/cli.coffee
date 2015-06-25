@@ -1,12 +1,16 @@
 
-require "../../../lotus-require"
-{ log, ln, color } = require "lotus-log"
+lotus = require "../../../lotus-require"
 
-require "lotus-repl"
-log.repl.transform = "coffee"
+process.chdir lotus.path
+
+{ log, ln, color } = require "lotus-log"
 log.cursor.isHidden = yes
 log.clear()
 log.moat 1
+log.indent = 2
+
+require "lotus-repl"
+log.repl.transform = "coffee"
 
 command = process.argv[2] ? "watch"
 
@@ -26,27 +30,32 @@ Config = require "./config"
 
 config = Config process.env.LOTUS_PATH
 
-log.format config, label: "config = "
+io = require "io"
+{ isType } = require "type-utils"
 
-config.loadPlugins (plugin, i, done) ->
-  log.format Array::slice.call(arguments), label: "arguments = "
-  _done = (error) ->
-    return done() if !error?
-    throw TypeError "'error' must be an Error or undefined." unless error instanceof Error
-    format = ->
-      stack:
-        exclude: ["**/q/q.js", "**/nimble/nimble.js"]
-        filter: (frame) -> not (frame.isNode() or frame.isNative() or frame.isEval())
-    log.throw { error, format }
+Q = require "q"
+Q.debug = yes
+# Q.verbose = yes
 
-  try plugin { commands, config }, _done
-  catch error then _done error
+config.loadPlugins (plugin, options) ->
+  plugin commands, options
 
 .then ->
-  return require commands[command] if commands.hasOwnProperty command
+
+  command = commands[command]
+
+  if command?
+    if isType command, Function then command()
+    else if isType command, String then require command
+    return
+
   help()
-  return process.exit 0 if command is "--help"
-  error = Error "'#{color.red command}' is an invalid command"
-  log.error error, stack: no, repl: no
+
+  if command is "--help"
+    process.exit 0
+
+  io.throw
+    error: Error "'#{color.red command}' is an invalid command"
+    format: simple: yes
 
 .done()

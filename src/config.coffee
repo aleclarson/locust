@@ -1,49 +1,56 @@
 
-define = require "define"
-NamedFunction = require "named-function"
-Path = require "path"
-{ log, color, Stack } = require "lotus-log"
-{ each, filter, isFile, isDir, readDir } = require "io"
-
-# CoffeeScript support
 require "coffee-script/register"
-Stack.setup()
+{ join } = require "path"
+{ isType, isKind } = require "type-utils"
+{ log, color, Stack } = require "lotus-log"
+NamedFunction = require "named-function"
+KeyMirror = require "keymirror"
+define = require "define"
+merge = require "merge"
+io = require "io"
 
 Config = NamedFunction "LotusConfig", (dir = ".") ->
 
-  unless this instanceof Config
+  unless isKind this, Config
     return new Config dir
 
-  unless isDir.sync dir
-    log.throw
-      error: Error "'@culprit' is not a directory." 
-      culprit: dir
+  unless io.isDir.sync dir
+    io.throw
       fatal: no
+      error: Error "'#{dir}' is not a directory." 
+      code: "NOT_A_DIRECTORY"
       format: formatError
 
   regex = /^lotus-config(\.[^\.]+)?$/
-  paths = readDir.sync dir
-  paths = filter.sync paths, (path) -> (regex.test path) and (isFile.sync dir + "/" + path)
-  config = null
+  paths = io.readDir.sync dir
+  paths = io.filter.sync paths, (path) -> (regex.test path) and (io.isFile.sync dir + "/" + path)
+  exports = null
   
   for path in paths
-    path = Path.join dir, path
-    config = module.optional path, (error) -> throw error if error.code isnt "REQUIRE_FAILED"
-    if config isnt null then break
+    path = join dir, path
+    exports = module.optional path, (error) -> throw error if error.code isnt "REQUIRE_FAILED"
+    if exports isnt null then break
   
-  if config is null
-    log.throw
-      error: Error "Failed to find a 'lotus-config' file."
-      culprit: dir
+  if exports is null
+    io.throw
       fatal: no
-      format: ->
-        opts = formatError()
-        opts.limit = 1
-        opts
+      error: Error "Failed to find a 'lotus-config' file."
+      code: "NO_LOTUS_CONFIG"
+      format: merge formatError(),
+        repl: { dir, config: this }
+        stack: { limit: 1 }
   
-  @path = path
-  @plugins = config.plugins
-  this
+  define this, ->
+    @options = configurable: no, writable: no
+    @
+      path: path
+      plugins: value: exports.plugins
+
+    @enumerable = no
+    @
+      exports: value: exports
+
+reservedPluginNames = KeyMirror ["plugins"]
 
 formatError = ->
   stack:
@@ -55,21 +62,40 @@ define ->
   @options = configurable: no, writable: no
   
   @ module, exports: Config
-  
+
   @ Config.prototype,
 
     loadPlugins: (iterator) ->
-      throw Error "No plugins found." unless @plugins instanceof Object
-      each @plugins, (id, i, done) ->
-        plugin = module.optional id, (error) ->
-          error.message = "Cannot find plugin '#{id}'." if error.code is "REQUIRE_FAILED"
+
+      unless isKind @plugins, Object
+        throw Error "No plugins found." 
+
+      isMap = isKind @plugins, Array
+
+      promise = io.fulfill()
+
+      io.each.sync @plugins, (path, alias) =>
+
+        if isMap and reservedPluginNames[alias]?
+          throw Error "'#{alias}' is reserved and cannot be used as a plugin name."
+
+        plugin = module.optional path, (error) ->
+          error.message = "Cannot find plugin '#{path}'." if error.code is "REQUIRE_FAILED"
           throw error
-        unless plugin instanceof Function
-          throw Error "'#{id}' failed to export a Function."
-        iterator plugin, i
+        
+        unless isKind plugin, Function
+          throw Error "'#{alias}' failed to export a Function."
 
-  @enumerable = no
-  
-  @ exports,
+        plugin.alias = alias
+        plugin.path = path
 
-    regex: /^lotus-config(\.[^\.]+)?$/
+        if isMap
+          options = @exports[alias]
+
+        unless isType options, Object
+          options = @exports[alias] = {}
+
+        promise = promise.then ->
+          iterator plugin, options
+
+      promise

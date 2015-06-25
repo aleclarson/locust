@@ -19,6 +19,7 @@
     "lotus-require": "aleclarson/lotus-require#1.0.0",
     "lotus-runner": "aleclarson/lotus-runner#1.0.0",
     "merge": "^1.2.0",
+    "plural": "^0.1.6",
     "semver": "^4.3.4"
   },
   "repository": {

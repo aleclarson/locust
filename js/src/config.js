@@ -1,71 +1,95 @@
 (function() {
-  var Config, NamedFunction, Path, Stack, color, define, each, filter, formatError, isDir, isFile, log, readDir, ref, ref1;
-
-  define = require("define");
-
-  NamedFunction = require("named-function");
-
-  Path = require("path");
-
-  ref = require("lotus-log"), log = ref.log, color = ref.color, Stack = ref.Stack;
-
-  ref1 = require("io"), each = ref1.each, filter = ref1.filter, isFile = ref1.isFile, isDir = ref1.isDir, readDir = ref1.readDir;
+  var Config, KeyMirror, NamedFunction, Stack, color, define, formatError, io, isKind, isType, join, log, merge, ref, ref1, reservedPluginNames;
 
   require("coffee-script/register");
 
-  Stack.setup();
+  join = require("path").join;
+
+  ref = require("type-utils"), isType = ref.isType, isKind = ref.isKind;
+
+  ref1 = require("lotus-log"), log = ref1.log, color = ref1.color, Stack = ref1.Stack;
+
+  NamedFunction = require("named-function");
+
+  KeyMirror = require("keymirror");
+
+  define = require("define");
+
+  merge = require("merge");
+
+  io = require("io");
 
   Config = NamedFunction("LotusConfig", function(dir) {
-    var config, j, len, path, paths, regex;
+    var exports, i, len, path, paths, regex;
     if (dir == null) {
       dir = ".";
     }
-    if (!(this instanceof Config)) {
+    if (!isKind(this, Config)) {
       return new Config(dir);
     }
-    if (!isDir.sync(dir)) {
-      log["throw"]({
-        error: Error("'@culprit' is not a directory."),
-        culprit: dir,
+    if (!io.isDir.sync(dir)) {
+      io["throw"]({
         fatal: false,
+        error: Error("'" + dir + "' is not a directory."),
+        code: "NOT_A_DIRECTORY",
         format: formatError
       });
     }
     regex = /^lotus-config(\.[^\.]+)?$/;
-    paths = readDir.sync(dir);
-    paths = filter.sync(paths, function(path) {
-      return (regex.test(path)) && (isFile.sync(dir + "/" + path));
+    paths = io.readDir.sync(dir);
+    paths = io.filter.sync(paths, function(path) {
+      return (regex.test(path)) && (io.isFile.sync(dir + "/" + path));
     });
-    config = null;
-    for (j = 0, len = paths.length; j < len; j++) {
-      path = paths[j];
-      path = Path.join(dir, path);
-      config = module.optional(path, function(error) {
+    exports = null;
+    for (i = 0, len = paths.length; i < len; i++) {
+      path = paths[i];
+      path = join(dir, path);
+      exports = module.optional(path, function(error) {
         if (error.code !== "REQUIRE_FAILED") {
           throw error;
         }
       });
-      if (config !== null) {
+      if (exports !== null) {
         break;
       }
     }
-    if (config === null) {
-      log["throw"]({
-        error: Error("Failed to find a 'lotus-config' file."),
-        culprit: dir,
+    if (exports === null) {
+      io["throw"]({
         fatal: false,
-        format: function() {
-          var opts;
-          opts = formatError();
-          opts.limit = 1;
-          return opts;
-        }
+        error: Error("Failed to find a 'lotus-config' file."),
+        code: "NO_LOTUS_CONFIG",
+        format: merge(formatError(), {
+          repl: {
+            dir: dir,
+            config: this
+          },
+          stack: {
+            limit: 1
+          }
+        })
       });
     }
-    this.path = path;
-    this.plugins = config.plugins;
-    return this;
+    return define(this, function() {
+      this.options = {
+        configurable: false,
+        writable: false
+      };
+      this({
+        path: path,
+        plugins: {
+          value: exports.plugins
+        }
+      });
+      this.enumerable = false;
+      return this({
+        exports: {
+          value: exports
+        }
+      });
+    });
   });
+
+  reservedPluginNames = KeyMirror(["plugins"]);
 
   formatError = function() {
     return {
@@ -86,29 +110,44 @@
     this(module, {
       exports: Config
     });
-    this(Config.prototype, {
+    return this(Config.prototype, {
       loadPlugins: function(iterator) {
-        if (!(this.plugins instanceof Object)) {
+        var isMap, promise;
+        if (!isKind(this.plugins, Object)) {
           throw Error("No plugins found.");
         }
-        return each(this.plugins, function(id, i, done) {
-          var plugin;
-          plugin = module.optional(id, function(error) {
-            if (error.code === "REQUIRE_FAILED") {
-              error.message = "Cannot find plugin '" + id + "'.";
+        isMap = isKind(this.plugins, Array);
+        promise = io.fulfill();
+        io.each.sync(this.plugins, (function(_this) {
+          return function(path, alias) {
+            var options, plugin;
+            if (isMap && (reservedPluginNames[alias] != null)) {
+              throw Error("'" + alias + "' is reserved and cannot be used as a plugin name.");
             }
-            throw error;
-          });
-          if (!(plugin instanceof Function)) {
-            throw Error("'" + id + "' failed to export a Function.");
-          }
-          return iterator(plugin, i);
-        });
+            plugin = module.optional(path, function(error) {
+              if (error.code === "REQUIRE_FAILED") {
+                error.message = "Cannot find plugin '" + path + "'.";
+              }
+              throw error;
+            });
+            if (!isKind(plugin, Function)) {
+              throw Error("'" + alias + "' failed to export a Function.");
+            }
+            plugin.alias = alias;
+            plugin.path = path;
+            if (isMap) {
+              options = _this.exports[alias];
+            }
+            if (!isType(options, Object)) {
+              options = _this.exports[alias] = {};
+            }
+            return promise = promise.then(function() {
+              return iterator(plugin, options);
+            });
+          };
+        })(this));
+        return promise;
       }
-    });
-    this.enumerable = false;
-    return this(exports, {
-      regex: /^lotus-config(\.[^\.]+)?$/
     });
   });
 

@@ -1,86 +1,228 @@
 (function() {
-  var File, Finder, NamedFunction, define, exports, io, isAbsolute, isFile, join, log, ref, ref1;
+  var Finder, NamedFunction, Stream, basename, define, dirname, io, isAbsolute, isKind, join, log, lotus, plural, ref, relative, spawn,
+    slice = [].slice;
 
-  log = require("lotus-log").log;
+  lotus = require("../../../lotus-require");
+
+  io = require("io");
+
+  log = require("lotus-log");
 
   Finder = require("finder");
 
   define = require("define");
 
-  ref = require("io"), io = ref.io, isFile = ref.isFile;
+  plural = require("plural");
 
-  ref1 = require("path"), join = ref1.join, isAbsolute = ref1.isAbsolute;
+  Stream = require("stream");
 
   NamedFunction = require("named-function");
 
-  File = exports = NamedFunction("File", function(path, pkg) {
-    if (!(this instanceof File)) {
-      return new File(path, pkg);
-    }
-    if (!isAbsolute(path)) {
-      throw Error("'path' must be absolute.");
-    }
-    if (!isFile.sync(path)) {
-      throw Error("'path' must be an existing file.");
-    }
-    return define(this, function() {
-      this.options = {};
-      this.configurable = false;
+  isKind = require("type-utils").isKind;
+
+  spawn = require("child_process").spawn;
+
+  ref = require("path"), join = ref.join, isAbsolute = ref.isAbsolute, dirname = ref.dirname, basename = ref.basename, relative = ref.relative;
+
+  exports.initialize = function(Module) {
+    var File, _findDepPath, _missingDep, _printOrigin, _unshiftContext;
+    delete exports.initialize;
+    File = exports.File = NamedFunction("File", function(path, module) {
+      var file;
+      if ((file = module.files[path]) != null) {
+        if (log.isDebug && log.isVerbose) {
+          log.moat(1);
+          log("File already exists: ");
+          log.red(relative(process.env.LOTUS_PATH, file.path));
+          log.moat(1);
+        }
+        return file;
+      }
+      if (!isKind(this, File)) {
+        return new File(path, module);
+      }
+      if (!isAbsolute(path)) {
+        throw Error("'path' must be absolute.");
+      }
+      if (!io.isFile.sync(path)) {
+        throw Error("'path' must be an existing file.");
+      }
+      if (log.isDebug && log.isVerbose) {
+        log.moat(1);
+        log("File created: ");
+        log.blue(relative(process.env.LOTUS_PATH, path));
+        log.moat(1);
+      }
+      module.files[path] = this;
+      return define(this, function() {
+        this.options = {};
+        this.configurable = false;
+        this({
+          isInitialized: false
+        });
+        this.writable = false;
+        return this({
+          module: module,
+          path: path,
+          dependers: {
+            value: {}
+          },
+          dependencies: {
+            value: {}
+          }
+        });
+      });
+    });
+    define(File.prototype, function() {
+      this.options = {
+        configurable: false,
+        writable: false
+      };
       this({
-        isInitialized: false
+        initialize: function() {
+          if (this.isInitialized) {
+            return io.fulfill();
+          }
+          this.isInitialized = true;
+          return io.all([this._loadLastModified(), this._loadDeps()]);
+        }
       });
-      this.writable = false;
+      this.enumerable = false;
       return this({
-        pkg: pkg,
-        path: path,
-        dependers: {
-          value: {}
+        _loadLastModified: function() {
+          return io.stat(this.path).then((function(_this) {
+            return function(stats) {
+              return _this.lastModified = stats.node.mtime;
+            };
+          })(this));
         },
-        dependencies: {
-          value: {}
+        _loadDeps: function() {
+          return io.read(this.path).then((function(_this) {
+            return function(contents) {
+              return _this._parseDeps(contents);
+            };
+          })(this));
+        },
+        _parseDeps: function(contents) {
+          var depPaths;
+          depPaths = _findDepPath.all(contents);
+          if (log.isDebug) {
+            log.moat(1);
+            _printOrigin();
+            log.yellow(relative(lotus.path, this.path));
+            log(" has ");
+            log.yellow(depPaths.length);
+            log(" ", plural("dependency", depPaths.length));
+            log.moat(1);
+          }
+          return io.each(depPaths, (function(_this) {
+            return function(depPath) {
+              return _this._loadDep(depPath).then(function(dep) {
+                if (dep == null) {
+                  return;
+                }
+                if (dep.module !== _this.module && !_this.module.dependencies.hasOwnProperty(dep.module.name)) {
+                  return _missingDep(_this.module, dep.module);
+                } else {
+                  _this.dependencies[dep.path] = dep;
+                  return dep.dependers[_this.path] = _this;
+                }
+              });
+            };
+          })(this));
+        },
+        _loadDep: function(depPath) {
+          var depDir, depFile;
+          depFile = module.abs(depPath, dirname(this.path));
+          if (depFile === null) {
+            return io.fulfill();
+          }
+          if (log.isDebug) {
+            log.moat(1);
+            _printOrigin();
+            log.yellow(relative(lotus.path, this.path));
+            log(" depends on ");
+            log.yellow(relative(lotus.path, depFile));
+            log.moat(1);
+          }
+          if (depPath[0] !== "/" && depPath[0] !== ".") {
+            return io.fulfill(File(depFile, Module(depPath)));
+          }
+          depDir = depFile;
+          return io.loop((function(_this) {
+            return function(done) {
+              var newDepDir, requiredJson;
+              newDepDir = dirname(depDir);
+              if (newDepDir === ".") {
+                return done(depDir);
+              }
+              depDir = newDepDir;
+              requiredJson = join(depDir, "package.json");
+              return io.isFile(requiredJson).then(function(isFile) {
+                if (!isFile) {
+                  return;
+                }
+                return done(basename(depDir));
+              });
+            };
+          })(this)).then((function(_this) {
+            return function(module) {
+              return File(depFile, Module(module));
+            };
+          })(this));
         }
       });
     });
-  });
-
-  define(File.prototype, function() {
-    this.options = {
-      configurable: false,
-      writable: false
+    _findDepPath = Finder({
+      regex: /(^|[\(\[\s\n]+)require\(("|')([^"']+)("|')/g,
+      group: 3
+    });
+    _printOrigin = function() {
+      return log.gray.dim("lotus/file ");
     };
-    this({
-      initialize: function() {
-        if (this.isInitialized) {
-          return io.resolved();
+    _unshiftContext = function(fn) {
+      return function() {
+        var args, context;
+        context = arguments[0], args = 2 <= arguments.length ? slice.call(arguments, 1) : [];
+        return fn.apply(context, args);
+      };
+    };
+    _missingDep = _unshiftContext(function(dep) {
+      var answer, deferred, installer;
+      if (!isKind(this, Module)) {
+        throw TypeError("'this' must be a Lotus.Module");
+      }
+      if (!isKind(dep, Module)) {
+        throw TypeError("'dep' must be a Lotus.Module");
+      }
+      log.moat(1);
+      _printOrigin();
+      log.yellow(this.name, " ");
+      log.bgRed.white("Error");
+      log(": ");
+      log.yellow(dep.name);
+      log(" isn't saved as a dependency.");
+      log.moat(1);
+      answer = log.prompt.sync({
+        label: function() {
+          return log.withIndent(2, function() {
+            return log.blue("npm install --save ");
+          });
         }
-        this.isInitialized = true;
-        return io.all([_findDependencies()]);
+      });
+      log.moat(1);
+      if (answer != null) {
+        deferred = io.defer();
+        installer = spawn("npm", ["install", "--save", answer], {
+          stdio: ["ignore", "ignore", "ignore"],
+          cwd: this.path
+        });
+        installer.on("exit", deferred.resolve);
+        return deferred.promise;
       }
     });
-    this.enumerable = false;
-    return this({
-      _findDependencies: function() {
-        var find;
-        log.moat(1);
-        log("Finding the dependencies of ");
-        log.pink(this.path);
-        log.moat(1);
-        find = Finder(/(^|[\(\[\s]+)require(\s|\()("|')([^"']+)("|')/gi);
-        find.group = 3;
-        return io.read(this.path).then(function(contents) {});
-      }
-    });
-  });
-
-  define(module, function() {
-    this.options = {
-      configurable: false,
-      writable: false
-    };
-    return this({
-      exports: exports
-    });
-  });
+    return File;
+  };
 
 }).call(this);
 

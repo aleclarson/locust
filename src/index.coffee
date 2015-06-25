@@ -7,7 +7,7 @@ define exports, ->
   @options = configurable: no, writable: no
   @
     log: lazy: -> require "lotus-log"
-    Package: require "./package"
+    Module: require "./module"
     File: require "./file"
 
 define module, ->

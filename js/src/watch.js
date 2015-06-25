@@ -1,9 +1,7 @@
 (function() {
-  var Package, Path, color, gaze, ln, log, ref, semver;
+  var Module, Path, _printOrigin, color, gaze, ln, log, lotus, ref, semver;
 
-  require("lotus-repl");
-
-  ref = require("lotus-log"), log = ref.log, ln = ref.ln, color = ref.color;
+  lotus = require("../../../lotus-require");
 
   Path = require("path");
 
@@ -11,17 +9,36 @@
 
   semver = require("semver");
 
-  Package = require("./package");
+  Module = require("./module");
 
-  Package.startup().then(function() {
+  ref = require("lotus-log"), log = ref.log, ln = ref.ln, color = ref.color;
+
+  require("lotus-repl");
+
+  _printOrigin = function() {
+    return log.gray.dim("lotus/watch ");
+  };
+
+  log.moat(1);
+
+  _printOrigin();
+
+  log("Gathering modules from ");
+
+  log.yellow(lotus.path);
+
+  log.moat(1);
+
+  Module.startup().then(function() {
     log.moat(1);
-    log.green.bold(Object.keys(Package.cache).length);
-    log(" packages were found!");
+    _printOrigin();
+    log.yellow(Object.keys(Module.cache).length);
+    log(" modules were found!");
     return log.moat(1);
   }).fail(function(error) {
     var format;
     log.moat(1);
-    log("Package startup failed!");
+    log("Module startup failed!");
     log.moat(1);
     format = error.format;
     error.format = function() {
@@ -35,7 +52,7 @@
       }
       opts.stack.exclude.push("**/q/q.js");
       opts.stack.filter = function(frame) {
-        return !frame.isNode() && !frame.isNative() && !frame.isEval();
+        return frame.isUserCreated();
       };
       return opts;
     };

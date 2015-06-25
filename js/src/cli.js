@@ -1,19 +1,23 @@
 (function() {
-  var Config, color, command, commands, config, help, ln, log, ref, ref1;
+  var Config, Q, color, command, commands, config, help, io, isType, ln, log, lotus, ref, ref1;
 
-  require("../../../lotus-require");
+  lotus = require("../../../lotus-require");
+
+  process.chdir(lotus.path);
 
   ref = require("lotus-log"), log = ref.log, ln = ref.ln, color = ref.color;
-
-  require("lotus-repl");
-
-  log.repl.transform = "coffee";
 
   log.cursor.isHidden = true;
 
   log.clear();
 
   log.moat(1);
+
+  log.indent = 2;
+
+  require("lotus-repl");
+
+  log.repl.transform = "coffee";
 
   command = (ref1 = process.argv[2]) != null ? ref1 : "watch";
 
@@ -35,60 +39,35 @@
 
   config = Config(process.env.LOTUS_PATH);
 
-  log.format(config, {
-    label: "config = "
-  });
+  io = require("io");
 
-  config.loadPlugins(function(plugin, i, done) {
-    var _done, error;
-    log.format(Array.prototype.slice.call(arguments), {
-      label: "arguments = "
-    });
-    _done = function(error) {
-      var format;
-      if (error == null) {
-        return done();
-      }
-      if (!(error instanceof Error)) {
-        throw TypeError("'error' must be an Error or undefined.");
-      }
-      format = function() {
-        return {
-          stack: {
-            exclude: ["**/q/q.js", "**/nimble/nimble.js"],
-            filter: function(frame) {
-              return !(frame.isNode() || frame.isNative() || frame.isEval());
-            }
-          }
-        };
-      };
-      return log["throw"]({
-        error: error,
-        format: format
-      });
-    };
-    try {
-      return plugin({
-        commands: commands,
-        config: config
-      }, _done);
-    } catch (_error) {
-      error = _error;
-      return _done(error);
-    }
+  isType = require("type-utils").isType;
+
+  Q = require("q");
+
+  Q.debug = true;
+
+  config.loadPlugins(function(plugin, options) {
+    return plugin(commands, options);
   }).then(function() {
-    var error;
-    if (commands.hasOwnProperty(command)) {
-      return require(commands[command]);
+    command = commands[command];
+    if (command != null) {
+      if (isType(command, Function)) {
+        command();
+      } else if (isType(command, String)) {
+        require(command);
+      }
+      return;
     }
     help();
     if (command === "--help") {
-      return process.exit(0);
+      process.exit(0);
     }
-    error = Error("'" + (color.red(command)) + "' is an invalid command");
-    return log.error(error, {
-      stack: false,
-      repl: false
+    return io["throw"]({
+      error: Error("'" + (color.red(command)) + "' is an invalid command"),
+      format: {
+        simple: true
+      }
     });
   }).done();
 
