@@ -5,210 +5,222 @@ log = require "lotus-log"
 Finder = require "finder"
 define = require "define"
 plural = require "plural"
-Stream = require "stream"
 NamedFunction = require "named-function"
 { isKind } = require "type-utils"
 { spawn } = require "child_process"
 { join, isAbsolute, dirname, basename, relative } = require "path"
+NODE_PATHS = require "node-paths"
 
-# Resolves a circular dependency between 'file.coffee' and 'module.coffee'.
-exports.initialize = (Module) ->
+# This is set lazily in `exports.initialize` as to resolve a circular dependency.
+Module = null
 
-  delete exports.initialize
+File = NamedFunction "File", (path, module) ->
 
-  File = exports.File = NamedFunction "File", (path, module) ->
+  if (file = module.files[path])?
 
-    if (file = module.files[path])?
+    if log.isDebug and log.isVerbose
+      log.moat 1
+      log "File already exists: "
+      log.red relative lotus.path, file.path
+      log.moat 1
+
+    return file
+
+  unless isKind this, File
+    return new File path, module
+
+  unless isAbsolute path
+    throw Error "'path' must be absolute."
+
+  if log.isDebug and log.isVerbose
+    log.moat 1
+    log "File created: "
+    log.blue relative lotus.path, path
+    log.moat 1
+
+  module.files[path] = this
+
+  define this, ->
+
+    @options = {}
+    @configurable = no
+    @
+      # Has `file.initialize()` been called?
+      isInitialized: no
+
+    @writable = no
+    @
+      # The module that this file belongs to.
+      module: module
+
+      # The absolute path to this file.
+      path: path
+
+      # A map of files that depend on this file.
+      dependers: value: {}
+
+      # A map of files that this file depends on.
+      dependencies: value: {}
+
+define File.prototype, ->
+  @options =
+    configurable: no
+    writable: no
+  @
+    initialize: ->
+      return io.fulfill() if @isInitialized
+      @isInitialized = yes
+      io.all [
+        @_loadLastModified()
+        @_loadDeps()
+      ]
+
+  @enumerable = no
+  @
+    _loadLastModified: ->
+
+      io.stat @path
+
+      .then (stats) =>
+        @lastModified = stats.node.mtime
+
+    _loadDeps: ->
+
+      io.read @path
+
+      .then (contents) =>
+        @_parseDeps contents
+
+    _parseDeps: (contents) ->
+
+      depPaths = _findDepPath.all contents
 
       if log.isDebug and log.isVerbose
         log.moat 1
-        log "File already exists: "
-        log.red relative process.env.LOTUS_PATH, file.path
+        _printOrigin()
+        log.yellow relative lotus.path, @path
+        log " has "
+        log.yellow depPaths.length
+        log " ", plural "dependency", depPaths.length
         log.moat 1
 
-      return file
-    
-    unless isKind this, File
-      return new File path, module
-    
-    unless isAbsolute path
-      throw Error "'path' must be absolute."
+      io.each depPaths, (depPath) =>
 
-    unless io.isFile.sync path
-      throw Error "'path' must be an existing file."
-    
-    if log.isDebug and log.isVerbose
-      log.moat 1
-      log "File created: "
-      log.blue relative process.env.LOTUS_PATH, path
-      log.moat 1
+        @_loadDep depPath
 
-    module.files[path] = this
+        .then (dep) =>
 
-    define this, ->
-      
-      @options = {}
-      @configurable = no
-      @
-        # Has `file.initialize()` been called?
-        isInitialized: no
+          return unless dep?
 
-      @writable = no
-      @
-        # The module that this file belongs to.
-        module: module
+          if log.isDebug and log.isVerbose
+            log.moat 1
+            _printOrigin()
+            log.yellow relative lotus.path, @path
+            log " depends on "
+            log.yellow relative lotus.path, dep.path
+            log.moat 1
 
-        # The absolute path to this file.
-        path: path
+          promise = _installMissing @module, dep.module
 
-        # A map of files that depend on this file.
-        dependers: value: {}
+          if promise?
+            @dependencies[dep.path] = dep
+            dep.dependers[@path] = this
 
-        # A map of files that this file depends on.
-        dependencies: value: {}
+          promise
 
-  define File.prototype, ->
-    @options =
-      configurable: no
-      writable: no
-    @
-      initialize: ->
-        return io.fulfill() if @isInitialized
-        @isInitialized = yes
-        io.all [
-          @_loadLastModified()
-          @_loadDeps()
-        ]
+    _loadDep: io.promised (depPath) ->
 
-    @enumerable = no
-    @
-      _loadLastModified: ->
-        
-        io.stat @path
-        
-        .then (stats) =>
-          @lastModified = stats.node.mtime
+      return if NODE_PATHS.indexOf(depPath) >= 0
 
-      _loadDeps: ->
-        
-        io.read @path
-        
-        .then (contents) =>
-          @_parseDeps contents
+      depFile = module.abs depPath, dirname @path
 
-      _parseDeps: (contents) ->
+      return if depFile is null
 
-        depPaths = _findDepPath.all contents
+      if depPath[0] isnt "." and depPath.indexOf("/") < 0
+        return File depFile, Module depPath
 
-        if log.isDebug
-          log.moat 1
-          _printOrigin()
-          log.yellow relative lotus.path, @path
-          log " has "
-          log.yellow depPaths.length
-          log " ", plural "dependency", depPaths.length
-          log.moat 1
+      depDir = depFile
 
-        io.each depPaths, (depPath) =>
+      io.loop (done) =>
 
-          @_loadDep depPath
+        newDepDir = dirname depDir
 
-          .then (dep) =>
-            
-            return unless dep?
-            
-            if dep.module isnt @module and !@module.dependencies.hasOwnProperty dep.module.name
-              _missingDep @module, dep.module
+        if newDepDir is "."
+          return done depDir
 
-            else
-              @dependencies[dep.path] = dep
-              dep.dependers[@path] = this
+        depDir = newDepDir
 
-      _loadDep: (depPath) ->
+        requiredJson = join depDir, "package.json"
 
-        depFile = module.abs depPath, dirname @path
+        io.isFile requiredJson
 
-        if depFile is null
-          return io.fulfill()
+        .then (isFile) ->
 
-        if log.isDebug
-          log.moat 1
-          _printOrigin()
-          log.yellow relative lotus.path, @path
-          log " depends on "
-          log.yellow relative lotus.path, depFile
-          log.moat 1
+          return unless isFile
 
-        if depPath[0] isnt "/" and depPath[0] isnt "."
-          return io.fulfill File depFile, Module depPath
+          done basename depDir
 
-        depDir = depFile
+      .then (module) =>
 
-        io.loop (done) =>
+        File depFile, Module module
 
-          newDepDir = dirname depDir
+exports.initialize = ->
+  Module = arguments[0]
+  exports.initialize = -> File
+  exports.File = File
 
-          if newDepDir is "."
-            return done depDir
+##
+## HELPERS
+##
 
-          depDir = newDepDir
+_findDepPath = Finder
+  regex: /(^|[\(\[\s\n]+)require\(("|')([^"']+)("|')/g
+  group: 3
 
-          requiredJson = join depDir, "package.json"
+_printOrigin = ->
+  log.gray.dim "lotus/file "
 
-          io.isFile requiredJson
-          
-          .then (isFile) ->
-            return unless isFile
-            done basename depDir
+_unshiftContext = (fn) -> (context, args...) ->
+  fn.apply context, args
 
-        .then (module) => File depFile, Module module
+_installMissing = _unshiftContext (dep) ->
 
-  ##
-  ## HELPERS
-  ##
+  if !isKind this, Module then throw TypeError "'this' must be a Lotus.Module"
 
-  _findDepPath = Finder
-    regex: /(^|[\(\[\s\n]+)require\(("|')([^"']+)("|')/g
-    group: 3
+  if !isKind dep, Module then throw TypeError "'dep' must be a Lotus.Module"
 
-  _printOrigin = ->
-    log.gray.dim "lotus/file "
+  return no if dep is this
 
-  _unshiftContext = (fn) -> (context, args...) ->
-    fn.apply context, args
+  info = require @path + "/package.json"
 
-  _missingDep = _unshiftContext (dep) ->
+  return no if info.dependencies? and info.dependencies.hasOwnProperty dep.name
 
-    if !isKind this, Module
-      throw TypeError "'this' must be a Lotus.Module"
+  return no if info.peerDependencies? and info.peerDependencies.hasOwnProperty dep.name
 
-    if !isKind dep, Module
-      throw TypeError "'dep' must be a Lotus.Module"
+  log.moat 1
+  _printOrigin()
+  log.yellow @name, " "
+  log.bgRed.white "Error"
+  log ": "
+  log.yellow dep.name
+  log " isn't saved as a dependency."
+  log.moat 1
 
-    log.moat 1
-    _printOrigin()
-    log.yellow @name, " "
-    log.bgRed.white "Error"
-    log ": "
-    log.yellow dep.name
-    log " isn't saved as a dependency."
-    log.moat 1
+  answer = log.prompt.sync label: ->
+    log.withIndent 2, -> log.blue "npm install --save "
 
-    answer = log.prompt.sync label: ->
-      log.withIndent 2, -> log.blue "npm install --save "
+  log.moat 1
 
-    log.moat 1
+  if answer?
 
-    if answer?
+    deferred = io.defer()
 
-      deferred = io.defer()     
+    installer = spawn "npm", ["install", "--save", answer],
+      stdio: ["ignore", "ignore", "ignore"]
+      cwd: @path
 
-      installer = spawn "npm", ["install", "--save", answer],
-        stdio: ["ignore", "ignore", "ignore"]
-        cwd: @path
+    installer.on "exit", deferred.resolve
 
-      installer.on "exit", deferred.resolve
+    deferred.promise
 
-      deferred.promise
-
-  return File
+  else null

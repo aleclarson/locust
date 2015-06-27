@@ -1,1 +1,1 @@
-module.exports = require("./js/src/file.js")
+require("./module"); module.exports = require("./js/src/file").File

@@ -1,6 +1,5 @@
 
 lotus = require "../../../lotus-require"
-
 process.chdir lotus.path
 
 { log, ln, color } = require "lotus-log"
@@ -12,11 +11,15 @@ log.indent = 2
 require "lotus-repl"
 log.repl.transform = "coffee"
 
-command = process.argv[2] ? "watch"
-
 commands =
-  watch: __dirname + "/watch"
-  upgrade: __dirname + "/upgrade"
+  watch: require "./watch"
+
+command = "watch"
+
+for arg in process.argv.slice 2
+  if arg[0] isnt "-"
+    command = arg
+    break
 
 help = ->
   log.moat 1
@@ -28,7 +31,7 @@ help = ->
 
 Config = require "./config"
 
-config = Config process.env.LOTUS_PATH
+config = Config lotus.path
 
 io = require "io"
 { isType } = require "type-utils"

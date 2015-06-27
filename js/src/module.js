@@ -1,5 +1,6 @@
 (function() {
-  var Config, File, Gaze, Module, NamedFunction, SemVer, _printError, _printOrigin, basename, color, define, exports, formatError, getType, io, isAbsolute, isKind, join, ln, log, lotus, merge, plural, ref, ref1, ref2, relative, resolve;
+  var Config, File, Gaze, Module, NamedFunction, SemVer, _formatError, _printError, _printOrigin, basename, color, define, getType, io, isAbsolute, isKind, join, ln, log, lotus, merge, plural, ref, ref1, ref2, relative, resolve,
+    slice = [].slice;
 
   lotus = require("../../../lotus-require");
 
@@ -27,7 +28,7 @@
 
   File = require("./file");
 
-  Module = exports = NamedFunction("Module", function(name) {
+  Module = NamedFunction("Module", function(name) {
     var module;
     if ((module = Module.cache[name]) != null) {
       return module;
@@ -61,15 +62,6 @@
     return this;
   });
 
-  define(module, function() {
-    this.options = {
-      configurable: false
-    };
-    return this({
-      exports: exports
-    });
-  });
-
   define(Module, function() {
     this.options = {
       configurable: false
@@ -78,16 +70,14 @@
       cache: {
         value: {}
       },
-      startup: function() {
-        var dir, moduleCount;
-        dir = process.env.LOTUS_PATH;
+      initialize: function() {
+        var moduleCount;
         moduleCount = 0;
-        return io.readDir(dir).then((function(_this) {
+        return io.readDir(lotus.path).then((function(_this) {
           return function(paths) {
-            paths = paths.slice(0, 8);
             return io.each(paths, function(path) {
               var module;
-              module = Module(join(dir, path));
+              module = Module(join(lotus.path, path));
               return io.isDir(module.path).then(function(isDir) {
                 if (isDir) {
                   return module.initialize();
@@ -96,7 +86,7 @@
                   fatal: false,
                   error: Error("'" + module.path + "' is not a directory."),
                   code: "NOT_A_DIRECTORY",
-                  format: merge(formatError(), {
+                  format: merge(_formatError(), {
                     repl: {
                       module: module,
                       Module: Module
@@ -112,17 +102,17 @@
                   return _printError(module.name, error);
                 }
               });
-            }).then(function() {
-              if (log.isDebug) {
-                log.moat(1);
-                _printOrigin();
-                log.yellow("" + moduleCount);
-                log(" modules were initialized!");
-                return log.moat(1);
-              }
             });
           };
-        })(this));
+        })(this)).then(function() {
+          if (log.isDebug) {
+            log.moat(1);
+            _printOrigin();
+            log.yellow("" + moduleCount);
+            log(" modules were initialized!");
+            return log.moat(1);
+          }
+        });
       }
     });
   });
@@ -156,7 +146,7 @@
     });
     this.enumerable = false;
     return this({
-      watchFiles: function(options) {
+      _watchFiles: function(options) {
         var deferred, gaze, pattern;
         deferred = io.defer();
         pattern = join(this.path, options.pattern);
@@ -185,52 +175,50 @@
               options.onReady(result);
             }
             return gaze.on("all", function(event, path) {
-              var file;
+              var enqueue, eventQueue, file, isDeleted;
               if (!io.isFile.sync(path)) {
                 return;
               }
+              isDeleted = false;
+              file = File(path, _this);
+              eventQueue = file.eventQueue || io.fulfill();
+              enqueue = function() {
+                var args, callback;
+                callback = arguments[0], args = 2 <= arguments.length ? slice.call(arguments, 1) : [];
+                if (!isKind(callback, Function)) {
+                  return false;
+                }
+                eventQueue = io.when(eventQueue, function() {
+                  return callback.apply(null, [file].concat(args));
+                });
+                return enqueue.wasCalled = true;
+              };
               if (event === "added") {
-                file = File(path, _this);
-                log.repl.sync({
-                  added: file
-                });
-                if (!isKind(options.onAdded, Function)) {
-                  return;
-                }
-                file.work = io["try"](function() {
-                  return options.onAdded(file);
-                });
+                enqueue(options.onCreate);
               } else if (event === "changed") {
-                log.repl.sync({
-                  changed: _this.files[path]
-                });
-                if (!isKind(options.onChanged, Function)) {
-                  return;
-                }
-                if (file == null) {
-                  file = _this.files[path];
-                }
-                file.work = file.work.then(function() {
-                  return options.onChanged(file);
-                });
+                enqueue(options.onChange);
               } else if (event === "deleted") {
-                log.repl.sync({
-                  deleted: _this.files[path]
-                });
-                if (!isKind(options.onDeleted, Function)) {
-                  return;
-                }
-                if (file == null) {
-                  file = _this.files[path];
-                }
+                isDeleted = true;
                 delete _this.files[path];
-                file.work = file.work.then(function() {
-                  return options.onDeleted(file);
+                if (isKind(options.onDelete, Function)) {
+                  enqueue(options.onDelete);
+                  addErrorHandler();
+                }
+              } else {
+                throw Error("Unhandled file event: '" + event + "'");
+              }
+              if (!isDeleted) {
+                enqueue(options.onSave);
+              }
+              enqueue(options.onEvent, event);
+              if (enqueue.wasCalled) {
+                eventQueue = eventQueue.fail(function(error) {
+                  return io["catch"](error, function() {
+                    return log.error(error);
+                  });
                 });
               }
-              return file.work = file.work.fail(function(error) {
-                return io["catch"](error, log.error);
-              });
+              return file.eventQueue = eventQueue;
             });
           };
         })(this));
@@ -248,7 +236,8 @@
         return io.isFile(moduleJsonPath).then((function(_this) {
           return function(isFile) {
             if (isFile) {
-              return io.read(moduleJsonPath);
+              moduleJson = require(moduleJsonPath);
+              return io.isDir(depDirPath);
             }
             return io["throw"]({
               fatal: false,
@@ -263,11 +252,6 @@
                 };
               }
             });
-          };
-        })(this)).then((function(_this) {
-          return function(moduleJsonRaw) {
-            moduleJson = JSON.parse(moduleJsonRaw);
-            return io.isDir(depDirPath);
           };
         })(this)).then((function(_this) {
           return function(isDir) {
@@ -291,8 +275,11 @@
         })(this)).then((function(_this) {
           return function(paths) {
             return io.each(paths, function(path, i) {
-              var dep, depJsonPath;
-              if ((path[0] === ".") || (moduleJson.devDependencies[path] != null)) {
+              var dep, depJsonPath, ref3;
+              if (path[0] === ".") {
+                return;
+              }
+              if (((ref3 = moduleJson.devDependencies) != null ? ref3[path] : void 0) != null) {
                 return;
               }
               dep = Module(path);
@@ -421,6 +408,14 @@
     });
   });
 
+  exports.initialize = function() {
+    File = File.initialize(Module);
+    exports.initialize = function() {
+      return Module;
+    };
+    return exports.Module = Module;
+  };
+
   _printOrigin = function() {
     return log.gray.dim("lotus/module ");
   };
@@ -436,7 +431,7 @@
     return log.moat(1);
   };
 
-  formatError = function() {
+  _formatError = function() {
     return {
       stack: {
         exclude: ["**/lotus-require/src/**", "**/q/q.js", "**/nimble/nimble.js"],
@@ -446,8 +441,6 @@
       }
     };
   };
-
-  File = File.initialize(Module);
 
 }).call(this);
 

@@ -1,5 +1,5 @@
 (function() {
-  var Config, Q, color, command, commands, config, help, io, isType, ln, log, lotus, ref, ref1;
+  var Config, Q, arg, color, command, commands, config, help, i, io, isType, len, ln, log, lotus, ref, ref1;
 
   lotus = require("../../../lotus-require");
 
@@ -19,12 +19,20 @@
 
   log.repl.transform = "coffee";
 
-  command = (ref1 = process.argv[2]) != null ? ref1 : "watch";
-
   commands = {
-    watch: __dirname + "/watch",
-    upgrade: __dirname + "/upgrade"
+    watch: require("./watch")
   };
+
+  command = "watch";
+
+  ref1 = process.argv.slice(2);
+  for (i = 0, len = ref1.length; i < len; i++) {
+    arg = ref1[i];
+    if (arg[0] !== "-") {
+      command = arg;
+      break;
+    }
+  }
 
   help = function() {
     log.moat(1);
@@ -37,7 +45,7 @@
 
   Config = require("./config");
 
-  config = Config(process.env.LOTUS_PATH);
+  config = Config(lotus.path);
 
   io = require("io");
 

@@ -1,35 +1,7 @@
 (function() {
-  var define, exports;
+  module.exports = require("../../../lotus-require");
 
-  define = require("define");
-
-  exports = require("../../../lotus-require");
-
-  define(exports, function() {
-    this.options = {
-      configurable: false,
-      writable: false
-    };
-    return this({
-      log: {
-        lazy: function() {
-          return require("lotus-log");
-        }
-      },
-      Module: require("./module"),
-      File: require("./file")
-    });
-  });
-
-  define(module, function() {
-    this.options = {
-      configurable: false,
-      writable: false
-    };
-    return this({
-      exports: exports
-    });
-  });
+  exports.log = require("lotus-log");
 
 }).call(this);
 
