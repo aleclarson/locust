@@ -188,7 +188,7 @@ define File.prototype, ->
 
       return if NODE_PATHS.indexOf(depPath) >= 0
 
-      depFile = lotus.resolve depPath, dirname @path
+      depFile = lotus.resolve depPath, @path
 
       return if depFile is null
 

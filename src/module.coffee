@@ -163,7 +163,7 @@ define Module, ->
           module.dependers = dependers
 
       .then ->
-        module._loadPlugins()
+        module._loadPlugins().done()
         module
 
   @enumerable = no
@@ -254,10 +254,11 @@ define Module.prototype, ->
 
       gaze = new Gaze pattern
 
-      log.origin "lotus/module"
-      log.green "watching "
-      log.yellow pattern
-      log.moat 1
+      if log.isVerbose
+        log.origin "lotus/module"
+        log.green "watching "
+        log.yellow pattern
+        log.moat 1
 
       gaze.once "ready", =>
 
@@ -282,10 +283,11 @@ define Module.prototype, ->
 
         if isKind options.onReady, Function
           async.each files, (file) ->
-            log.origin "lotus/module"
-            log.cyan "ready "
-            log.yellow relative process.cwd(), file.path
-            log.moat 1
+            if log.isVerbose
+              log.origin "lotus/module"
+              log.cyan "ready "
+              log.yellow relative process.cwd(), file.path
+              log.moat 1
             options.onReady file
 
       gaze.on "all", (event, path) =>
@@ -360,7 +362,7 @@ define Module.prototype, ->
         async.try => plugin this, options
 
       .fail (error) =>
-        throw error if error.fatal
+        throw error if error.fatal isnt no
         log.origin "lotus/module"
         log.yellow @name
         log " has no plugins."

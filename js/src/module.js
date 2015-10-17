@@ -184,7 +184,7 @@ define(Module, function() {
           return module.dependers = dependers;
         });
       }).then(function() {
-        module._loadPlugins();
+        module._loadPlugins().done();
         return module;
       });
     }
@@ -289,10 +289,12 @@ define(Module.prototype, function() {
       pattern = join(this.path, options.pattern);
       pattern = relative(process.cwd(), pattern);
       gaze = new Gaze(pattern);
-      log.origin("lotus/module");
-      log.green("watching ");
-      log.yellow(pattern);
-      log.moat(1);
+      if (log.isVerbose) {
+        log.origin("lotus/module");
+        log.green("watching ");
+        log.yellow(pattern);
+        log.moat(1);
+      }
       gaze.once("ready", (function(_this) {
         return function() {
           var files, paths, result, watched;
@@ -318,10 +320,12 @@ define(Module.prototype, function() {
           }
           if (isKind(options.onReady, Function)) {
             return async.each(files, function(file) {
-              log.origin("lotus/module");
-              log.cyan("ready ");
-              log.yellow(relative(process.cwd(), file.path));
-              log.moat(1);
+              if (log.isVerbose) {
+                log.origin("lotus/module");
+                log.cyan("ready ");
+                log.yellow(relative(process.cwd(), file.path));
+                log.moat(1);
+              }
               return options.onReady(file);
             });
           }
@@ -416,7 +420,7 @@ define(Module.prototype, function() {
         };
       })(this)).fail((function(_this) {
         return function(error) {
-          if (error.fatal) {
+          if (error.fatal !== false) {
             throw error;
           }
           log.origin("lotus/module");

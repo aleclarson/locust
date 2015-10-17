@@ -202,7 +202,7 @@ define(File.prototype, function() {
       if (NODE_PATHS.indexOf(depPath) >= 0) {
         return;
       }
-      depFile = lotus.resolve(depPath, dirname(this.path));
+      depFile = lotus.resolve(depPath, this.path);
       if (depFile === null) {
         return;
       }
