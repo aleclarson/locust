@@ -1,1 +1,4 @@
-require("./module"); module.exports = require("./js/src/file").File
+
+require("./module");
+
+module.exports = require("./js/src/file").initialize();

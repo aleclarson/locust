@@ -1,1 +1,2 @@
-module.exports = require("./js/src/module").initialize()
+
+module.exports = require("./js/src/module").initialize();

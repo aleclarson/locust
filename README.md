@@ -1,29 +1,25 @@
 
-# lotus v1.0.0 [![experimental](http://badges.github.io/stability-badges/dist/experimental.svg)](http://github.com/badges/stability-badges)
+# lotus v1.0.0 [![stable](http://badges.github.io/stability-badges/dist/stable.svg)](http://github.com/badges/stability-badges)
 
-`lotus` is a development framework that provides these helpful features:
+`lotus` is a toolset for enhancing the CoffeeScript development process.
 
-  - Minimal task runner
+It acts as an umbrella for these modules:
 
-  - Framework-agnostic test runner
+#### &nbsp;&nbsp;&nbsp;&nbsp;- [**lotus-cli**](https://github.com/aleclarson/lotus/tree/master/docs/cli.md)
 
-  - Keep local dependencies up-to-date automatically
+#### &nbsp;&nbsp;&nbsp;&nbsp;- [**lotus-log**](https://github.com/aleclarson/lotus-log)
 
-  - Advanced logging utilities
-
-  - Treat your local package directory like 'node_modules' during development
+#### &nbsp;&nbsp;&nbsp;&nbsp;- [**lotus-require**](https://github.com/aleclarson/lotus-require)
 
 &nbsp;
 
-#### :skull: Under Development :skull:
+## getting started
 
-This framework is still under active development and won't work as expected.
+This guide should be enough to get you going with `lotus`. If you have any questions, feel free to [submit an issue](https://github.com/aleclarson/lotus/issues). I'll try to help as soon as I can.
 
 &nbsp;
 
-## Command-Line Interface
-
-The sections below document how to use the `lotus` command-line tool!
+### 0. Install `lotus`
 
 ```sh
 npm install -g aleclarson/lotus#1.0.0
@@ -31,76 +27,86 @@ npm install -g aleclarson/lotus#1.0.0
 
 &nbsp;
 
-#### Minimal task runner
+### 1. Setup environment variables
 
-Watch your `$LOTUS_PATH` package directory and run customizable tasks for watched packages.
+Environment variables for configuring `lotus` include:
+
+```sh
+export LOTUS="true"
+```
+
+The **LOTUS** environment variable specifies if `lotus` should be used. If not set, `lotus` is not used.
+
+```sh
+export LOTUS_PATH="$HOME/modules"
+```
+
+The **LOTUS_PATH** environment variable specifies where to look for your locally installed modules.
+
+If you're on OSX, put these in your `.bashrc` or `.bash_profile`.
+
+&nbsp;
+
+### 2. Setup your local modules
+
+In order for `lotus` to find your modules, they must each contain a `lotus-config.coffee` file that specifies which plugins to use (plus any additional plugin configuration).
+
+This is what a typical `lotus-config.coffee` file will look like:
+
+```CoffeeScript
+module.exports =
+
+  plugins:
+    coffee: "lotus-coffee"
+    runner: "lotus-runner"
+
+  coffee:
+    bare: yes
+    sourceMap: yes
+
+  runner:
+    suite: "lotus-jasmine"
+    reporter: "lotus-jasmine/reporter"
+```
+
+As you can see, more setup and/or configuration may be required depending on the plugins your module uses. Be sure to read each plugin's documentation thoroughly.
+
+&nbsp;
+
+### 3. Require `lotus` in your modules
+
+```CoffeeScript
+require "lotus"
+```
+
+This will modify the `Module` class from Node's core. In doing so, any modules in the `$LOTUS_PATH` directory will be preferred when calling `require "some-module"` as you would normally do.
+
+For example, let's say the paths `$LOTUS_PATH/some-module` and `my-project/node_modules/some-module` both exist. Then you call `require "some-module"` from a source file in `my-project/src`. If `$LOTUS` equals `"true"`, the first path will be used. Otherwise, the second path will be used.
+
+&nbsp;
+
+### 4. Run the `lotus` command in your terminal
 
 ```sh
 lotus
 ```
 
-**TIP:** There's no need to `cd` before calling `lotus` because it always uses `$LOTUS_PATH` as the working directory!
-
-Every package directory must contain a `lotus-config` file.
-
-[Learn more about **lotus-config**]().
+Running this command will find every valid module in `$LOTUS_PATH`. During this process, each module's `lotus-config.coffee` file is used to initialize any specified plugins. Once all modules are fully initialized, `lotus` leaves it up to the plugins to do the rest.
 
 &nbsp;
 
-#### Framework-agnostic test runner
+### 5. Find suitable plugins.
 
-Even though it's simple to manually run the tests of an individual package...
+Currently available plugins include:
 
-```sh
-lotus test <pkg>
-```
+#### &nbsp;&nbsp;&nbsp;&nbsp;- [**lotus-coffee**](https://github.com/aleclarson/lotus-coffee)
 
-... you will probably want to setup your `lotus-config` to allow for efficient & automatic test-running when files change.
+#### &nbsp;&nbsp;&nbsp;&nbsp;- [**lotus-runner**](https://github.com/aleclarson/lotus-runner)
 
-```CoffeeScript
-module.exports =
-  plugins: ["lotus-runner"]
-```
+#### &nbsp;&nbsp;&nbsp;&nbsp;- [**lotus-jasmine**](https://github.com/aleclarson/lotus-jasmine)
 
-When the `lotus` command is used, the package whose `lotus-config` you changed will watch its `js/spec` and `js/src` directories for changes and automatically run the affected tests.
+#### &nbsp;&nbsp;&nbsp;&nbsp;- [**lotus-lab**](https://github.com/aleclarson/lotus-lab)
 
-&nbsp;
-
-## JavaScript API
-
-The sections below document how to use `lotus` in your JavaScript applications.
-
-```sh
-npm install --save aleclarson/lotus#1.0.0
-```
-
-&nbsp;
-
-#### Advanced logging utilities
-
-`lotus` hopes to provide every logging utility you might need while developing your applications.
-
-There are some addons made only for Node (like [**lotus-prompt**]() and [**lotus-repl**]()).
-
-Learn more at [**lotus-log**]().
-
-```CoffeeScript
-{ log } = require "lotus"
-if log.isVerbose
-  log.moat 1
-  log.green "Hello", " ", "world"
-  log.moat 1
-```
-
-&nbsp;
-
-#### Treat your local package directory like 'node_modules' during development
-
-Learn more at [**lotus-require**]().
-
-```CoffeeScript
-require "lotus"
-merge = require "merge" # Tries to require '$LOTUS_PATH/merge' if it exists.
-```
+Please send a pull request if you make a plugin! :+1:
 
 &nbsp;

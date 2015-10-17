@@ -1,6 +1,3 @@
-(function() {
 
 
-}).call(this);
-
-//# sourceMappingURL=map/upgrade.js.map
+//# sourceMappingURL=../../map/src/upgrade.map

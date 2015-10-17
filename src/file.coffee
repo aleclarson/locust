@@ -1,38 +1,36 @@
 
-lotus = require "../../../lotus-require"
-io = require "io"
-log = require "lotus-log"
+lotus = require "lotus-require"
+
+{ join, isAbsolute, dirname, basename, relative } = require "path"
+{ async, sync } = require "io"
+NamedFunction = require "named-function"
+NODE_PATHS = require "node-paths"
+{ isKind } = require "type-utils"
+{ spawn } = require "child_process"
+inArray = require "in-array"
 Finder = require "finder"
 define = require "define"
 plural = require "plural"
-NamedFunction = require "named-function"
-{ isKind } = require "type-utils"
-{ spawn } = require "child_process"
-{ join, isAbsolute, dirname, basename, relative } = require "path"
-NODE_PATHS = require "node-paths"
+log = require "lotus-log"
 
 # This is set lazily in `exports.initialize` as to resolve a circular dependency.
 Module = null
 
 File = NamedFunction "File", (path, module) ->
 
-  if (file = module.files[path])?
+  module ?= Module.forFile path
 
-    if log.isDebug and log.isVerbose
-      log.moat 1
-      log "File already exists: "
-      log.red relative lotus.path, file.path
-      log.moat 1
+  throw TypeError "Invalid file path: '#{path}'" unless module?
 
-    return file
+  file = module.files[path]
 
-  unless isKind this, File
-    return new File path, module
+  return file if file?
 
-  unless isAbsolute path
-    throw Error "'path' must be absolute."
+  return new File path, module unless isKind this, File
 
-  if log.isDebug and log.isVerbose
+  throw Error "'path' must be absolute." unless isAbsolute path
+
+  if log.isVerbose
     log.moat 1
     log "File created: "
     log.blue relative lotus.path, path
@@ -41,9 +39,7 @@ File = NamedFunction "File", (path, module) ->
   module.files[path] = this
 
   define this, ->
-
     @options = {}
-    @configurable = no
     @
       # Has `file.initialize()` been called?
       isInitialized: no
@@ -62,49 +58,102 @@ File = NamedFunction "File", (path, module) ->
       # A map of files that this file depends on.
       dependencies: value: {}
 
+define File,
+
+  fromJSON: (file, files) ->
+
+    json = files[file.path]
+
+    unless json?
+      if log.isVerbose
+        log.moat 1
+        log "File '#{file.path}' could not be found"
+        log.moat 1
+      return no
+
+    if json.lastModified?
+
+      file.isInitialized = yes
+
+      file.lastModified = json.lastModified
+
+    async.reduce json.dependers, {}, (dependers, path) ->
+
+      dependers[path] = File path, Module.forFile path
+
+    .then (dependers) ->
+
+      file.dependers = dependers
+
+      async.reduce json.dependencies, {}, (dependencies, path) ->
+
+        dependencies[path] = File path, Module.forFile path
+
+    .then (dependencies) ->
+
+      file.dependencies = dependencies
+
+      file
+
 define File.prototype, ->
   @options =
     configurable: no
     writable: no
   @
     initialize: ->
-      return io.fulfill() if @isInitialized
+      return async.fulfill() if @isInitialized
       @isInitialized = yes
-      io.all [
+      async.all [
         @_loadLastModified()
         @_loadDeps()
       ]
+
+    delete: ->
+      if log.isVerbose
+        log.moat 1
+        log "File deleted: "
+        log.moat 0
+        log.red @path
+        log.moat 1
+      delete @module.files[@path]
+      # TODO: Delete any references that other modules have to this module.
+
+    toJSON: ->
+      dependers = Object.keys @dependers
+      dependencies = Object.keys @dependencies
+      { @path, dependers, dependencies, @lastModified }
 
   @enumerable = no
   @
     _loadLastModified: ->
 
-      io.stat @path
+      async.stats @path
 
       .then (stats) =>
         @lastModified = stats.node.mtime
 
     _loadDeps: ->
 
-      io.read @path
+      async.read @path
 
       .then (contents) =>
         @_parseDeps contents
 
     _parseDeps: (contents) ->
 
+      depCount = 0
+
       depPaths = _findDepPath.all contents
 
-      if log.isDebug and log.isVerbose
-        log.moat 1
-        _printOrigin()
+      if log.isVerbose
+        log.origin "lotus/file"
         log.yellow relative lotus.path, @path
         log " has "
         log.yellow depPaths.length
         log " ", plural "dependency", depPaths.length
         log.moat 1
 
-      io.each depPaths, (depPath) =>
+      async.each depPaths, (depPath) =>
 
         @_loadDep depPath
 
@@ -112,9 +161,10 @@ define File.prototype, ->
 
           return unless dep?
 
+          depCount++
+
           if log.isDebug and log.isVerbose
-            log.moat 1
-            _printOrigin()
+            log.origin "lotus/file"
             log.yellow relative lotus.path, @path
             log " depends on "
             log.yellow relative lotus.path, dep.path
@@ -128,11 +178,17 @@ define File.prototype, ->
 
           promise
 
-    _loadDep: io.promised (depPath) ->
+      .then =>
+        if log.isVerbose
+          log.moat 1
+          log "File '#{@path}' loaded #{depCount} dependencies"
+          log.moat 1
+
+    _loadDep: async.promised (depPath) ->
 
       return if NODE_PATHS.indexOf(depPath) >= 0
 
-      depFile = module.abs depPath, dirname @path
+      depFile = lotus.resolve depPath, dirname @path
 
       return if depFile is null
 
@@ -141,7 +197,7 @@ define File.prototype, ->
 
       depDir = depFile
 
-      io.loop (done) =>
+      async.loop (done) =>
 
         newDepDir = dirname depDir
 
@@ -152,7 +208,7 @@ define File.prototype, ->
 
         requiredJson = join depDir, "package.json"
 
-        io.isFile requiredJson
+        async.isFile requiredJson
 
         .then (isFile) ->
 
@@ -164,10 +220,15 @@ define File.prototype, ->
 
         File depFile, Module module
 
-exports.initialize = ->
-  Module = arguments[0]
-  exports.initialize = -> File
-  exports.File = File
+isInitialized = no
+
+define exports,
+
+  initialize: (_Module)->
+    unless isInitialized
+      isInitialized = yes
+      Module = _Module
+    File
 
 ##
 ## HELPERS
@@ -177,34 +238,41 @@ _findDepPath = Finder
   regex: /(^|[\(\[\s\n]+)require\(("|')([^"']+)("|')/g
   group: 3
 
-_printOrigin = ->
-  log.gray.dim "lotus/file "
-
 _unshiftContext = (fn) -> (context, args...) ->
   fn.apply context, args
 
 _installMissing = _unshiftContext (dep) ->
 
-  if !isKind this, Module then throw TypeError "'this' must be a Lotus.Module"
+  if !isKind this, Module
+    throw TypeError "'this' must be a Lotus.Module"
 
-  if !isKind dep, Module then throw TypeError "'dep' must be a Lotus.Module"
+  if !isKind dep, Module
+    throw TypeError "'dep' must be a Lotus.Module"
 
-  return no if dep is this
+  if dep is this
+    return no
 
-  info = require @path + "/package.json"
+  info = JSON.parse sync.read @path + "/package.json"
 
-  return no if info.dependencies? and info.dependencies.hasOwnProperty dep.name
+  isIgnored =
+    (info.dependencies?.hasOwnProperty dep.name) or
+    (info.peerDependencies?.hasOwnProperty dep.name) or
+    (inArray @config?.implicitDependencies, dep.name)
 
-  return no if info.peerDependencies? and info.peerDependencies.hasOwnProperty dep.name
+  if isIgnored
+    return no
 
-  log.moat 1
-  _printOrigin()
+  log.origin "lotus/file"
   log.yellow @name, " "
   log.bgRed.white "Error"
   log ": "
   log.yellow dep.name
   log " isn't saved as a dependency."
   log.moat 1
+
+  return no if @_reportedMissing[dep.path]
+
+  @_reportedMissing[dep.path] = yes
 
   answer = log.prompt.sync label: ->
     log.withIndent 2, -> log.blue "npm install --save "
@@ -213,14 +281,21 @@ _installMissing = _unshiftContext (dep) ->
 
   if answer?
 
-    deferred = io.defer()
+    deferred = async.defer()
 
     installer = spawn "npm", ["install", "--save", answer],
       stdio: ["ignore", "ignore", "ignore"]
       cwd: @path
 
-    installer.on "exit", deferred.resolve
+    installer.on "exit", =>
+      log.origin "lotus/file"
+      log.yellow @name
+      log " installed "
+      log.yellow dep.name
+      log " successfully!"
+      log.moat 1
+      deferred.resolve()
 
-    deferred.promise
+    return deferred.promise
 
-  else null
+  null

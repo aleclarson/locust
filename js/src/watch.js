@@ -1,66 +1,58 @@
-(function() {
-  var Module, Path, _printOrigin, color, gaze, ln, log, lotus, ref, semver;
+var Module, Path, color, exit, gaze, ln, log, lotus, ref, semver, sync;
 
-  lotus = require("../../../lotus-require");
+lotus = require("lotus-require");
 
-  require("lotus-repl");
+require("lotus-repl");
 
-  ref = require("lotus-log"), log = ref.log, ln = ref.ln, color = ref.color;
+ref = require("lotus-log"), log = ref.log, ln = ref.ln, color = ref.color;
 
-  log._repl = function(scope) {
-    return log.repl.sync(scope);
-  };
+sync = require("io").sync;
 
-  semver = require("semver");
+semver = require("semver");
 
-  Path = require("path");
+Path = require("path");
 
-  gaze = require("gaze");
+gaze = require("gaze");
 
-  Module = require("./module");
+exit = require("exit");
 
-  module.exports = function() {
-    Module = Module.initialize();
-    log.moat(1);
-    _printOrigin();
-    log("Gathering modules from ");
+Module = require("./module");
+
+module.exports = function(options) {
+  var fromJSON, isCached, promise, ref1, startTime, toJSON;
+  Module = Module.initialize(options);
+  ref1 = require("./persistence"), toJSON = ref1.toJSON, fromJSON = ref1.fromJSON;
+  isCached = sync.isFile("lotus-cache.json");
+  startTime = Date.now();
+  if (isCached) {
+    promise = fromJSON();
+  } else {
+    log.origin("lotus/watch");
+    log.green("crawling ");
     log.yellow(lotus.path);
     log.moat(1);
-    return Module.initialize().then(function() {
-      log.moat(1);
-      _printOrigin();
-      log.yellow(Object.keys(Module.cache).length);
-      log(" modules were found!");
-      return log.moat(1);
-    }).fail(function(error) {
-      var format;
-      log.moat(1);
-      log("Module startup failed!");
-      log.moat(1);
-      format = error.format;
-      error.format = function() {
-        var base, opts;
-        opts = format instanceof Function ? format() : {};
-        if (opts.stack == null) {
-          opts.stack = {};
-        }
-        if ((base = opts.stack).exclude == null) {
-          base.exclude = [];
-        }
-        opts.stack.exclude.push("**/q/q.js");
-        opts.stack.filter = function(frame) {
-          return frame.isUserCreated();
-        };
-        return opts;
-      };
-      throw error;
-    }).done();
-  };
+    promise = Module.initialize();
+  }
+  return promise.then(function() {
+    var isDirty;
+    log.origin("lotus/watch");
+    log.yellow(Object.keys(Module.cache).length);
+    log(" modules were found");
+    log.gray(" (in " + (Date.now() - startTime) + " ms)");
+    log.moat(1);
+    if (!isCached) {
+      toJSON().done();
+    }
+    isDirty = false;
+    Module._emitter.on("file event", function() {
+      return isDirty = true;
+    });
+    return exit.on(function() {
+      if (isDirty) {
+        return toJSON().done();
+      }
+    });
+  }).done();
+};
 
-  _printOrigin = function() {
-    return log.gray.dim("lotus/watch ");
-  };
-
-}).call(this);
-
-//# sourceMappingURL=map/watch.js.map
+//# sourceMappingURL=../../map/src/watch.map

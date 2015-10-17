@@ -1,25 +1,64 @@
 
-lotus = require "../../../lotus-require"
-process.chdir lotus.path
+lotus = require "lotus-require"
 
+{ async } = require "io"
+{ isType } = require "type-utils"
+KeyBindings = require "key-bindings"
 { log, ln, color } = require "lotus-log"
-log.cursor.isHidden = yes
-log.clear()
-log.moat 1
-log.indent = 2
-
 require "lotus-repl"
+
+
+#
+# Key bindings
+#
+
+keys = KeyBindings
+
+  "c+ctrl": ->
+    log.moat 1
+    log.red "CTRL+C"
+    log.moat 1
+    process.exit 0
+
+keys.stream = process.stdin
+
+
+#
+# Logging configuration
+#
+
+log.clear()
+log.indent = 2
+log.cursor.isHidden = yes
 log.repl.transform = "coffee"
+
+log.moat 1
+
+if log.isDebug
+  log "Port: "
+  log.green process.pid
+  log.moat 1
+
+
+#
+# Parse the terminal input for a command
+#
 
 commands =
   watch: require "./watch"
 
+# Default to the 'watch' command.
 command = "watch"
 
 for arg in process.argv.slice 2
   if arg[0] isnt "-"
     command = arg
     break
+
+
+#
+# `--help` prints a list of valid commands
+#
 
 help = ->
   log.moat 1
@@ -29,16 +68,24 @@ help = ->
   log ln, Object.keys(commands).join ln
   log.moat 1
 
+return help() if command is "--help"
+
+
+#
+# Plugin startup
+#
+
 Config = require "./config"
 
 config = Config lotus.path
 
-io = require "io"
-{ isType } = require "type-utils"
-
-Q = require "q"
-Q.debug = yes
-# Q.verbose = yes
+log.origin "lotus"
+log.yellow "plugins:"
+log.moat 0
+log.plusIndent 2
+log Object.keys(config.plugins).join log.ln
+log.popIndent()
+log.moat 1
 
 config.loadPlugins (plugin, options) ->
   plugin commands, options
@@ -48,17 +95,23 @@ config.loadPlugins (plugin, options) ->
   command = commands[command]
 
   if command?
-    if isType command, Function then command()
-    else if isType command, String then require command
-    return
+    process.chdir lotus.path
 
-  help()
+    if isType command, Function
+      command.call()
 
-  if command is "--help"
-    process.exit 0
+    else if isType command, String
+      require command
 
-  io.throw
-    error: Error "'#{color.red command}' is an invalid command"
-    format: simple: yes
+    else
+      async.throw
+        error: Error "'#{color.red command}' must be defined as a Function or String"
+        format: simple: yes
+
+  else
+    help()
+    async.throw
+      error: Error "'#{color.red command}' is an invalid command"
+      format: simple: yes
 
 .done()

@@ -31,7 +31,7 @@ Just like your `src` files, your `spec` files are found in `module.files`.
 
 ```CoffeeScript
 module.exports =
-  
+
   plugins:
     coffee: "lotus-coffee"
     runner: "lotus-runner"

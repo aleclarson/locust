@@ -1,54 +1,49 @@
 
 require "coffee-script/register"
-{ join } = require "path"
-{ isType, isKind } = require "type-utils"
+
 { log, color, Stack } = require "lotus-log"
+{ isType, isKind } = require "type-utils"
+{ sync, async } = require "io"
 NamedFunction = require "named-function"
 KeyMirror = require "keymirror"
+combine = require "combine"
 define = require "define"
-merge = require "merge"
-io = require "io"
+Path = require "path"
 
 Config = NamedFunction "LotusConfig", (dir = ".") ->
 
   unless isKind this, Config
     return new Config dir
 
-  unless io.isDir.sync dir
-    io.throw
+  unless sync.isDir dir
+    async.throw
       fatal: no
-      error: Error "'#{dir}' is not a directory." 
+      error: Error "'#{dir}' is not a directory."
       code: "NOT_A_DIRECTORY"
       format: formatError
 
   regex = /^lotus-config(\.[^\.]+)?$/
-  paths = io.readDir.sync dir
-  paths = io.filter.sync paths, (path) -> (regex.test path) and (io.isFile.sync dir + "/" + path)
-  exports = null
-  
+  paths = sync.readDir dir
+  paths = sync.filter paths, (path) -> (regex.test path) and (sync.isFile dir + "/" + path)
+  json = null
+
   for path in paths
-    path = join dir, path
-    exports = module.optional path, (error) -> throw error if error.code isnt "REQUIRE_FAILED"
-    if exports isnt null then break
-  
-  if exports is null
-    io.throw
+    path = Path.join dir, path
+    json = module.optional path, (error) -> throw error if error.code isnt "REQUIRE_FAILED"
+    if json isnt null then break
+
+  if json is null
+    async.throw
       fatal: no
       error: Error "Failed to find a 'lotus-config' file."
       code: "NO_LOTUS_CONFIG"
-      format: merge formatError(),
+      format: combine formatError(),
         repl: { dir, config: this }
         stack: { limit: 1 }
-  
-  define this, ->
-    @options = configurable: no, writable: no
-    @
-      path: path
-      plugins: value: exports.plugins
 
-    @enumerable = no
-    @
-      exports: value: exports
+  Config.fromJSON.call this, path, json
+
+module.exports = Config
 
 reservedPluginNames = KeyMirror ["plugins"]
 
@@ -57,45 +52,56 @@ formatError = ->
     exclude: ["**/lotus/src/config.*"]
     filter: (frame) -> !frame.isEval() and !frame.isNative() and !frame.isNode()
 
-define ->
-  
-  @options = configurable: no, writable: no
-  
-  @ module, exports: Config
+define Config,
 
-  @ Config.prototype,
+  fromJSON: (path, json) ->
 
-    loadPlugins: (iterator) ->
+    unless isKind this, Config
+      config = Object.create Config.prototype
+      return Config.fromJSON.call config, path, json
 
-      unless isKind @plugins, Object
-        throw Error "No plugins found." 
+    { plugins, implicitDependencies } = json
 
-      isMap = isKind @plugins, Array
+    if isKind plugins, Array
+      plugins = KeyMirror plugins
 
-      promise = io.fulfill()
+    json = value: json
+    plugins = value: plugins
+    implicitDependencies = value: implicitDependencies
 
-      io.each.sync @plugins, (path, alias) =>
+    define this, ->
+      @options = frozen: yes
+      @ { path, plugins, implicitDependencies, json }
 
-        if isMap and reservedPluginNames[alias]?
-          throw Error "'#{alias}' is reserved and cannot be used as a plugin name."
+define Config.prototype,
 
-        plugin = module.optional path, (error) ->
-          error.message = "Cannot find plugin '#{path}'." if error.code is "REQUIRE_FAILED"
-          throw error
-        
-        unless isKind plugin, Function
-          throw Error "'#{alias}' failed to export a Function."
+  loadPlugins: (iterator) ->
 
-        plugin.alias = alias
-        plugin.path = path
+    unless @plugins?
+      error = Error "No plugins found."
+      error.fatal = no
+      return async.reject error
 
-        if isMap
-          options = @exports[alias]
+    promise = async.fulfill()
 
-        unless isType options, Object
-          options = @exports[alias] = {}
+    aliases = if @plugins instanceof KeyMirror then @plugins._keys else Object.keys @plugins
 
-        promise = promise.then ->
-          iterator plugin, options
+    async.each aliases, (alias) =>
 
-      promise
+      if reservedPluginNames[alias]?
+        throw Error "'#{alias}' is reserved and cannot be used as a plugin name."
+
+      path = @plugins[alias]
+      plugin = module.optional path, (error) ->
+        error.message = "Cannot find plugin '#{path}'." if error.code is "REQUIRE_FAILED"
+        throw error
+
+      unless isKind plugin, Function
+        throw Error "'#{alias}' failed to export a Function."
+
+      plugin.alias = alias
+      plugin.path = path
+      iterator plugin, @json[alias] or {}
+
+    .fail (error) ->
+      log.error error

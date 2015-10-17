@@ -1,10 +1,4 @@
 
 # lotus/file
 
-```CoffeeScript
-File = require "lotus/file"
-```
-
-&nbsp;
-
-
+*Not yet documented.*

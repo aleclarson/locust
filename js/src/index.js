@@ -1,8 +1,19 @@
-(function() {
-  module.exports = require("../../../lotus-require");
+var lotus;
 
-  exports.log = require("lotus-log");
+lotus = require("lotus-require");
 
-}).call(this);
+if (lotus == null) {
+  lotus = {};
+}
 
-//# sourceMappingURL=map/index.js.map
+lotus.log = require("lotus-log");
+
+module.exports = lotus;
+
+Object.defineProperty(global, "_lotus_", {
+  get: function() {
+    return lotus;
+  }
+});
+
+//# sourceMappingURL=../../map/src/index.map
