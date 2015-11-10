@@ -3,24 +3,23 @@ lotus = require "lotus-require"
 
 { async } = require "io"
 { isType } = require "type-utils"
-KeyBindings = require "key-bindings"
 { log, ln, color } = require "lotus-log"
-require "lotus-repl"
 
 
 #
 # Key bindings
 #
 
-keys = KeyBindings
-
-  "c+ctrl": ->
-    log.moat 1
-    log.red "CTRL+C"
-    log.moat 1
-    process.exit 0
-
-keys.stream = process.stdin
+# KeyBindings = require "key-bindings"
+# keys = KeyBindings
+#
+#   "c+ctrl": ->
+#     log.moat 1
+#     log.red "CTRL+C"
+#     log.moat 1
+#     process.exit 0
+#
+# keys.stream = process.stdin
 
 
 #
@@ -29,8 +28,10 @@ keys.stream = process.stdin
 
 log.clear()
 log.indent = 2
-log.cursor.isHidden = yes
-log.repl.transform = "coffee"
+# log.cursor.isHidden = yes
+
+# require "lotus-repl"
+# log.repl.transform = "coffee"
 
 log.moat 1
 

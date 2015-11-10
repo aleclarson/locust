@@ -2,11 +2,15 @@ var Config, KeyMirror, NamedFunction, Path, Stack, async, color, combine, define
 
 require("coffee-script/register");
 
-ref = require("lotus-log"), log = ref.log, color = ref.color, Stack = ref.Stack;
+Stack = require("stack");
 
-ref1 = require("type-utils"), isType = ref1.isType, isKind = ref1.isKind;
+Stack.initialize();
 
-ref2 = require("io"), sync = ref2.sync, async = ref2.async;
+ref = require("type-utils"), isType = ref.isType, isKind = ref.isKind;
+
+ref1 = require("io"), sync = ref1.sync, async = ref1.async;
+
+ref2 = require("lotus-log"), log = ref2.log, color = ref2.color;
 
 NamedFunction = require("named-function");
 

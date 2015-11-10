@@ -7,7 +7,8 @@
 
 lotus = require "lotus-require"
 
-require "lotus-repl"
+# TODO: Stop 'lotus-repl' from preventing CTRL+C.
+# require "lotus-repl"
 
 { log, ln, color } = require "lotus-log"
 { sync } = require "io"

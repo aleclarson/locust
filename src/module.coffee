@@ -118,7 +118,7 @@ define Module, ->
 
     forFile: (path) ->
       path = relative lotus.path, path
-      name = dirname path.slice 0, -1 + path.indexOf "/"
+      name = path.slice 0, path.indexOf "/"
       return null unless has Module.cache, name
       Module name
 
@@ -203,18 +203,20 @@ define Module.prototype, ->
     toJSON: ->
 
       if @error?
-        if log.isVerbose
-          log.moat 1
-          log "'#{module.name}' threw an error: "
-          log @error.message
-          log.moat 1
+        log
+          .moat 1
+          .red module.name
+          .white " threw an error: "
+          .gray @error.message
+          .moat 1
         return no
 
       unless @config?
-        if log.isVerbose
-          log.moat 1
-          log "'#{@name}' has no config file"
-          log.moat 1
+        log
+          .moat 1
+          .red @name
+          .white " has no config file"
+          .moat 1
         return no
 
       config =
@@ -254,7 +256,7 @@ define Module.prototype, ->
 
       gaze = new Gaze pattern
 
-      if log.isVerbose
+      if log.isDebug and log.isVerbose
         log.origin "lotus/module"
         log.green "watching "
         log.yellow pattern
@@ -283,7 +285,7 @@ define Module.prototype, ->
 
         if isKind options.onReady, Function
           async.each files, (file) ->
-            if log.isVerbose
+            if log.isDebug and log.isVerbose
               log.origin "lotus/module"
               log.cyan "ready "
               log.yellow relative process.cwd(), file.path

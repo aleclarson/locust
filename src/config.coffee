@@ -1,9 +1,11 @@
 
 require "coffee-script/register"
+Stack = require "stack"
+Stack.initialize()
 
-{ log, color, Stack } = require "lotus-log"
 { isType, isKind } = require "type-utils"
 { sync, async } = require "io"
+{ log, color } = require "lotus-log"
 NamedFunction = require "named-function"
 KeyMirror = require "keymirror"
 combine = require "combine"

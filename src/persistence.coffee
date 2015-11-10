@@ -57,22 +57,29 @@ module.exports =
     async.read "lotus-cache.json"
 
     .then (json) ->
-
       json = JSON.parse json
-
-      async.each json.modules, (module) ->
-
-        async.try ->
-
-          Module.fromJSON module
-
-        .then (module) ->
-
-          async.each module.files, (file) ->
-
-            File.fromJSON file, json.files
-
-        .fail async.catch
+      fileMap = Object.create null
+      async.each json.files, (file) ->
+        fileMap[file.path] = file
+      .then ->
+        modules = []
+        async.each json.modules, (module) ->
+          async.try -> Module.fromJSON module
+          .then (module) -> modules.push module
+          .fail async.catch
+        .then ->
+          global.modules = modules
+          async.each modules, (module) ->
+            async.each module.files, (file) ->
+              json = fileMap[file.path]
+              if json?
+                File.fromJSON file, json
+                return
+              if log.isVerbose
+                log.moat 1
+                log.yellow "WARN: "
+                log "File '#{file.path}' does not exist in 'lotus-cache.json'."
+                log.moat 1
 
     .then ->
 

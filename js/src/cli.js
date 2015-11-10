@@ -1,4 +1,4 @@
-var Config, KeyBindings, arg, async, color, command, commands, config, help, i, isType, keys, len, ln, log, lotus, ref, ref1;
+var Config, arg, async, color, command, commands, config, help, i, isType, len, ln, log, lotus, ref, ref1;
 
 lotus = require("lotus-require");
 
@@ -6,30 +6,11 @@ async = require("io").async;
 
 isType = require("type-utils").isType;
 
-KeyBindings = require("key-bindings");
-
 ref = require("lotus-log"), log = ref.log, ln = ref.ln, color = ref.color;
-
-require("lotus-repl");
-
-keys = KeyBindings({
-  "c+ctrl": function() {
-    log.moat(1);
-    log.red("CTRL+C");
-    log.moat(1);
-    return process.exit(0);
-  }
-});
-
-keys.stream = process.stdin;
 
 log.clear();
 
 log.indent = 2;
-
-log.cursor.isHidden = true;
-
-log.repl.transform = "coffee";
 
 log.moat(1);
 

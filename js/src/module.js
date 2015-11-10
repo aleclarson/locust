@@ -154,7 +154,7 @@ define(Module, function() {
     forFile: function(path) {
       var name;
       path = relative(lotus.path, path);
-      name = dirname(path.slice(0, -1 + path.indexOf("/")));
+      name = path.slice(0, path.indexOf("/"));
       if (!has(Module.cache, name)) {
         return null;
       }
@@ -236,20 +236,11 @@ define(Module.prototype, function() {
     toJSON: function() {
       var config, dependers, files;
       if (this.error != null) {
-        if (log.isVerbose) {
-          log.moat(1);
-          log("'" + module.name + "' threw an error: ");
-          log(this.error.message);
-          log.moat(1);
-        }
+        log.moat(1).red(module.name).white(" threw an error: ").gray(this.error.message).moat(1);
         return false;
       }
       if (this.config == null) {
-        if (log.isVerbose) {
-          log.moat(1);
-          log("'" + this.name + "' has no config file");
-          log.moat(1);
-        }
+        log.moat(1).red(this.name).white(" has no config file").moat(1);
         return false;
       }
       config = {
@@ -289,7 +280,7 @@ define(Module.prototype, function() {
       pattern = join(this.path, options.pattern);
       pattern = relative(process.cwd(), pattern);
       gaze = new Gaze(pattern);
-      if (log.isVerbose) {
+      if (log.isDebug && log.isVerbose) {
         log.origin("lotus/module");
         log.green("watching ");
         log.yellow(pattern);
@@ -320,7 +311,7 @@ define(Module.prototype, function() {
           }
           if (isKind(options.onReady, Function)) {
             return async.each(files, function(file) {
-              if (log.isVerbose) {
+              if (log.isDebug && log.isVerbose) {
                 log.origin("lotus/module");
                 log.cyan("ready ");
                 log.yellow(relative(process.cwd(), file.path));

@@ -20,7 +20,8 @@ File = NamedFunction "File", (path, module) ->
 
   module ?= Module.forFile path
 
-  throw TypeError "Invalid file path: '#{path}'" unless module?
+  unless module?
+    throw TypeError "File '#{path}' belongs to a module not yet cached."
 
   file = module.files[path]
 
@@ -39,60 +40,37 @@ File = NamedFunction "File", (path, module) ->
   module.files[path] = this
 
   define this, ->
-    @options = {}
+
+    @options = configurable: no
     @
-      # Has `file.initialize()` been called?
       isInitialized: no
+      dependers: value: {}
+      dependencies: value: {}
 
     @writable = no
-    @
-      # The module that this file belongs to.
-      module: module
-
-      # The absolute path to this file.
-      path: path
-
-      # A map of files that depend on this file.
-      dependers: value: {}
-
-      # A map of files that this file depends on.
-      dependencies: value: {}
+    @ { module, path }
 
 define File,
 
-  fromJSON: (file, files) ->
-
-    json = files[file.path]
-
-    unless json?
-      if log.isVerbose
-        log.moat 1
-        log "File '#{file.path}' could not be found"
-        log.moat 1
-      return no
+  # Used to initialize a File with its JSON representation.
+  fromJSON: (file, json) ->
 
     if json.lastModified?
-
       file.isInitialized = yes
-
       file.lastModified = json.lastModified
 
     async.reduce json.dependers, {}, (dependers, path) ->
-
-      dependers[path] = File path, Module.forFile path
+      dependers[path] = File path
 
     .then (dependers) ->
-
       file.dependers = dependers
 
+    .then ->
       async.reduce json.dependencies, {}, (dependencies, path) ->
-
-        dependencies[path] = File path, Module.forFile path
+        dependencies[path] = File path
 
     .then (dependencies) ->
-
       file.dependencies = dependencies
-
       file
 
 define File.prototype, ->
@@ -145,14 +123,6 @@ define File.prototype, ->
 
       depPaths = _findDepPath.all contents
 
-      if log.isVerbose
-        log.origin "lotus/file"
-        log.yellow relative lotus.path, @path
-        log " has "
-        log.yellow depPaths.length
-        log " ", plural "dependency", depPaths.length
-        log.moat 1
-
       async.each depPaths, (depPath) =>
 
         @_loadDep depPath
@@ -179,9 +149,12 @@ define File.prototype, ->
           promise
 
       .then =>
-        if log.isVerbose
-          log.moat 1
-          log "File '#{@path}' loaded #{depCount} dependencies"
+        if log.isDebug and log.isVerbose
+          log.origin "lotus/file"
+          log.yellow relative lotus.path, @path
+          log " has "
+          log.yellow depCount
+          log " ", plural "dependency", depCount
           log.moat 1
 
     _loadDep: async.promised (depPath) ->

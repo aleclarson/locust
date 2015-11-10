@@ -33,7 +33,7 @@ File = NamedFunction("File", function(path, module) {
     module = Module.forFile(path);
   }
   if (module == null) {
-    throw TypeError("Invalid file path: '" + path + "'");
+    throw TypeError("File '" + path + "' belongs to a module not yet cached.");
   }
   file = module.files[path];
   if (file != null) {
@@ -53,14 +53,11 @@ File = NamedFunction("File", function(path, module) {
   }
   module.files[path] = this;
   return define(this, function() {
-    this.options = {};
+    this.options = {
+      configurable: false
+    };
     this({
-      isInitialized: false
-    });
-    this.writable = false;
-    return this({
-      module: module,
-      path: path,
+      isInitialized: false,
       dependers: {
         value: {}
       },
@@ -68,31 +65,27 @@ File = NamedFunction("File", function(path, module) {
         value: {}
       }
     });
+    this.writable = false;
+    return this({
+      module: module,
+      path: path
+    });
   });
 });
 
 define(File, {
-  fromJSON: function(file, files) {
-    var json;
-    json = files[file.path];
-    if (json == null) {
-      if (log.isVerbose) {
-        log.moat(1);
-        log("File '" + file.path + "' could not be found");
-        log.moat(1);
-      }
-      return false;
-    }
+  fromJSON: function(file, json) {
     if (json.lastModified != null) {
       file.isInitialized = true;
       file.lastModified = json.lastModified;
     }
     return async.reduce(json.dependers, {}, function(dependers, path) {
-      return dependers[path] = File(path, Module.forFile(path));
+      return dependers[path] = File(path);
     }).then(function(dependers) {
-      file.dependers = dependers;
+      return file.dependers = dependers;
+    }).then(function() {
       return async.reduce(json.dependencies, {}, function(dependencies, path) {
-        return dependencies[path] = File(path, Module.forFile(path));
+        return dependencies[path] = File(path);
       });
     }).then(function(dependencies) {
       file.dependencies = dependencies;
@@ -156,14 +149,6 @@ define(File.prototype, function() {
       var depCount, depPaths;
       depCount = 0;
       depPaths = _findDepPath.all(contents);
-      if (log.isVerbose) {
-        log.origin("lotus/file");
-        log.yellow(relative(lotus.path, this.path));
-        log(" has ");
-        log.yellow(depPaths.length);
-        log(" ", plural("dependency", depPaths.length));
-        log.moat(1);
-      }
       return async.each(depPaths, (function(_this) {
         return function(depPath) {
           return _this._loadDep(depPath).then(function(dep) {
@@ -189,9 +174,12 @@ define(File.prototype, function() {
         };
       })(this)).then((function(_this) {
         return function() {
-          if (log.isVerbose) {
-            log.moat(1);
-            log("File '" + _this.path + "' loaded " + depCount + " dependencies");
+          if (log.isDebug && log.isVerbose) {
+            log.origin("lotus/file");
+            log.yellow(relative(lotus.path, _this.path));
+            log(" has ");
+            log.yellow(depCount);
+            log(" ", plural("dependency", depCount));
             return log.moat(1);
           }
         };
