@@ -80,12 +80,14 @@ define(File, {
       file.lastModified = json.lastModified;
     }
     return async.reduce(json.dependers, {}, function(dependers, path) {
-      return dependers[path] = File(path);
+      dependers[path] = File(path);
+      return dependers;
     }).then(function(dependers) {
       return file.dependers = dependers;
     }).then(function() {
       return async.reduce(json.dependencies, {}, function(dependencies, path) {
-        return dependencies[path] = File(path);
+        dependencies[path] = File(path);
+        return dependencies;
       });
     }).then(function(dependencies) {
       file.dependencies = dependencies;
@@ -249,7 +251,7 @@ _unshiftContext = function(fn) {
 };
 
 _installMissing = _unshiftContext(function(dep) {
-  var answer, deferred, info, installer, isIgnored, ref2, ref3, ref4;
+  var info, isIgnored, ref2, ref3, ref4;
   if (!isKind(this, Module)) {
     throw TypeError("'this' must be a Lotus.Module");
   }
@@ -275,33 +277,6 @@ _installMissing = _unshiftContext(function(dep) {
     return false;
   }
   this._reportedMissing[dep.path] = true;
-  answer = log.prompt.sync({
-    label: function() {
-      return log.withIndent(2, function() {
-        return log.blue("npm install --save ");
-      });
-    }
-  });
-  log.moat(1);
-  if (answer != null) {
-    deferred = async.defer();
-    installer = spawn("npm", ["install", "--save", answer], {
-      stdio: ["ignore", "ignore", "ignore"],
-      cwd: this.path
-    });
-    installer.on("exit", (function(_this) {
-      return function() {
-        log.origin("lotus/file");
-        log.yellow(_this.name);
-        log(" installed ");
-        log.yellow(dep.name);
-        log(" successfully!");
-        log.moat(1);
-        return deferred.resolve();
-      };
-    })(this));
-    return deferred.promise;
-  }
   return null;
 });
 

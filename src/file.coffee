@@ -61,6 +61,7 @@ define File,
 
     async.reduce json.dependers, {}, (dependers, path) ->
       dependers[path] = File path
+      dependers
 
     .then (dependers) ->
       file.dependers = dependers
@@ -68,6 +69,7 @@ define File,
     .then ->
       async.reduce json.dependencies, {}, (dependencies, path) ->
         dependencies[path] = File path
+        dependencies
 
     .then (dependencies) ->
       file.dependencies = dependencies
@@ -247,28 +249,30 @@ _installMissing = _unshiftContext (dep) ->
 
   @_reportedMissing[dep.path] = yes
 
-  answer = log.prompt.sync label: ->
-    log.withIndent 2, -> log.blue "npm install --save "
-
-  log.moat 1
-
-  if answer?
-
-    deferred = async.defer()
-
-    installer = spawn "npm", ["install", "--save", answer],
-      stdio: ["ignore", "ignore", "ignore"]
-      cwd: @path
-
-    installer.on "exit", =>
-      log.origin "lotus/file"
-      log.yellow @name
-      log " installed "
-      log.yellow dep.name
-      log " successfully!"
-      log.moat 1
-      deferred.resolve()
-
-    return deferred.promise
+  # TODO: Re-enable this when the prompt works right.
+  #
+  # answer = log.prompt.sync label: ->
+  #   log.withIndent 2, -> log.blue "npm install --save "
+  #
+  # log.moat 1
+  #
+  # if answer?
+  #
+  #   deferred = async.defer()
+  #
+  #   installer = spawn "npm", ["install", "--save", answer],
+  #     stdio: ["ignore", "ignore", "ignore"]
+  #     cwd: @path
+  #
+  #   installer.on "exit", =>
+  #     log.origin "lotus/file"
+  #     log.yellow @name
+  #     log " installed "
+  #     log.yellow dep.name
+  #     log " successfully!"
+  #     log.moat 1
+  #     deferred.resolve()
+  #
+  #   return deferred.promise
 
   null
