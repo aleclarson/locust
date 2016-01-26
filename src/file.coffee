@@ -1,22 +1,21 @@
 
 lotus = require "lotus-require"
 
-{ join, isAbsolute, dirname, basename, relative } = require "path"
+{ join, isAbsolute, dirname, basename, extname, relative } = require "path"
+{ isKind, setType } = require "type-utils"
 { async, sync } = require "io"
+{ spawn } = require "child_process"
+
 NamedFunction = require "named-function"
 NODE_PATHS = require "node-paths"
-{ isKind } = require "type-utils"
-{ spawn } = require "child_process"
 inArray = require "in-array"
 Finder = require "finder"
 define = require "define"
 plural = require "plural"
 log = require "lotus-log"
 
-# This is set lazily in `exports.initialize` as to resolve a circular dependency.
-Module = null
-
-File = NamedFunction "File", (path, module) ->
+module.exports =
+global.File = NamedFunction "File", (path, module) ->
 
   module ?= Module.forFile path
 
@@ -24,31 +23,27 @@ File = NamedFunction "File", (path, module) ->
     throw TypeError "File '#{path}' belongs to a module not yet cached."
 
   file = module.files[path]
-
   return file if file?
 
-  return new File path, module unless isKind this, File
+  module.files[path] =
+  file = setType {}, File
 
   throw Error "'path' must be absolute." unless isAbsolute path
+  name = basename path, extname path
+  dir = relative module.path, dirname path
 
-  if log.isVerbose
-    log.moat 1
-    log "File created: "
-    log.blue relative lotus.path, path
-    log.moat 1
-
-  module.files[path] = this
-
-  define this, ->
+  define file, ->
 
     @options = configurable: no
     @
-      isInitialized: no
-      dependers: value: {}
-      dependencies: value: {}
+      dependers: {}
+      dependencies: {}
 
     @writable = no
-    @ { module, path }
+    @ { name, dir, path, module }
+
+    @options = enumerable: no
+    @ { _initializing: null }
 
 define File,
 
@@ -81,9 +76,8 @@ define File.prototype, ->
     writable: no
   @
     initialize: ->
-      return async.fulfill() if @isInitialized
-      @isInitialized = yes
-      async.all [
+      return @_initializing if @_initializing
+      @_initializing = async.all [
         @_loadLastModified()
         @_loadDeps()
       ]
@@ -135,12 +129,12 @@ define File.prototype, ->
 
           depCount++
 
-          if log.isDebug and log.isVerbose
-            log.origin "lotus/file"
-            log.yellow relative lotus.path, @path
-            log " depends on "
-            log.yellow relative lotus.path, dep.path
-            log.moat 1
+          # log
+          #   .moat 1
+          #   .yellow relative lotus.path, @path
+          #   .white " depends on "
+          #   .yellow relative lotus.path, dep.path
+          #   .moat 1
 
           promise = _installMissing @module, dep.module
 
@@ -168,7 +162,9 @@ define File.prototype, ->
       return if depFile is null
 
       if depPath[0] isnt "." and depPath.indexOf("/") < 0
-        return File depFile, Module depPath
+        try module = Module depPath
+        return unless module?
+        return File depFile, module
 
       depDir = depFile
 
@@ -194,16 +190,6 @@ define File.prototype, ->
       .then (module) =>
 
         File depFile, Module module
-
-isInitialized = no
-
-define exports,
-
-  initialize: (_Module)->
-    unless isInitialized
-      isInitialized = yes
-      Module = _Module
-    File
 
 ##
 ## HELPERS
@@ -237,17 +223,10 @@ _installMissing = _unshiftContext (dep) ->
   if isIgnored
     return no
 
-  log.origin "lotus/file"
-  log.yellow @name, " "
-  log.bgRed.white "Error"
-  log ": "
-  log.yellow dep.name
-  log " isn't saved as a dependency."
-  log.moat 1
+  if @_reportedMissing[dep.name]
+    return no
 
-  return no if @_reportedMissing[dep.path]
-
-  @_reportedMissing[dep.path] = yes
+  @_reportedMissing[dep.name] = yes
 
   # TODO: Re-enable this when the prompt works right.
   #

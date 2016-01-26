@@ -9,12 +9,13 @@
 lotus = require "lotus-require"
 
 { join, relative, resolve, dirname, basename, isAbsolute } = require "path"
-{ getType, isKind, isType } = require "type-utils"
+{ getType, setType, isKind, isType } = require "type-utils"
 { log, color, ln } = require "lotus-log"
 { EventEmitter } = require "events"
 { sync, async } = require "io"
-NamedFunction = require "named-function"
 { Gaze } = require "gaze"
+
+NamedFunction = require "named-function"
 combine = require "combine"
 inArray = require "in-array"
 SemVer = require "semver"
@@ -25,13 +26,11 @@ has = require "has"
 mm = require "micromatch"
 
 Config = require "./config"
-File = require "./file"
 
-Module = NamedFunction "Module", (name) ->
+module.exports =
+global.Module = NamedFunction "Module", (name) ->
 
   return Module.cache[name] if has Module.cache, name
-
-  return new Module name unless isKind this, Module
 
   if (name[0] is "/") or (name[0..1] is "./")
     async.throw
@@ -40,32 +39,33 @@ Module = NamedFunction "Module", (name) ->
 
   path = resolve name
 
-  if sync.isDir path
+  unless sync.isDir path
+    throw Error "'#{path}' must be a directory."
 
-    if log.isVerbose
-      log.moat 1
-      log "Module created: "
-      log.blue name
-      log.moat 1
+  Module.cache[name] =
+  module = setType {}, Module
 
-    Module.cache[name] = this
+  fs = new Gaze
+  fs.paths = Object.create null
+  fs.on "all", (event, path) ->
+    module._onFileEvent event, path
 
-  else
-    error = Error "'#{path}' must be a directory."
+  define module, ->
 
-  isInitialized = no
-  files = value: {}
-  versions = value: {}
-  dependers = value: {}
-  dependencies = value: {}
+    @options = configurable: no
+    @
+      name: name
+      path: path
+      files: {}
+      versions: {}
+      dependers: {}
+      dependencies: {}
 
-  _reportedMissing = value: {}
-
-  define this, ->
-    @options = enumerable: no
-    @ { _reportedMissing }
-
-  define this, { name, path, isInitialized, files, versions, dependers, dependencies, error }
+    @enumerable = no
+    @
+      _fs: fs
+      _initializing: null
+      _reportedMissing: {}
 
 define Module, ->
 
@@ -73,6 +73,17 @@ define Module, ->
   @
     cache:
       value: Object.create null
+
+    # Watch the files that match the given 'pattern'.
+    # Only the files that have been registered via 'module.watch()' will be used.
+    watch: (options, callback) ->
+      options = include: options if isType options, String
+      options.include ?= "**/*"
+      Module._emitter.on "file event", ({ file, event }) ->
+        return if mm(file.path, options.include).length is 0
+        return if options.exclude? and mm(file.path, options.exclude).length > 0
+        callback file, event, options
+      return
 
     initialize: ->
 
@@ -82,39 +93,26 @@ define Module, ->
 
       .then (paths) =>
 
-        async.each paths, (path) ->
+        async.all sync.map paths, (path) ->
 
-          _module = Module path
+          try module = Module path
 
-          async.isDir _module.path
+          return unless module?
 
-          .then (isDir) ->
-
-            # Set up the module's versions, dependencies, and plugins.
-            return _module.initialize() if isDir
-
-            _module._delete()
-
-            async.throw
-              fatal: no
-              error: Error "'#{_module.path}' is not a directory."
-              code: "NOT_A_DIRECTORY"
-              format: combine _formatError(),
-                repl: { _module, Module }
+          module.initialize()
 
           .then ->
             moduleCount++
 
           .fail (error) ->
-            _module._onError error
+            module._onError error
 
       .then ->
-
-        if log.isDebug
-          log.origin "lotus/module"
-          log.yellow "#{moduleCount}"
-          log " modules were initialized!"
-          log.moat 1
+        log
+          .moat 1
+          .yellow moduleCount
+          .white " modules were initialized!"
+          .moat 1
 
     forFile: (path) ->
       path = relative lotus.path, path
@@ -134,7 +132,7 @@ define Module, ->
 
         throw module.error
 
-      module.isInitialized = yes
+      module._initializing = async.fulfill()
 
       module.config = Config.fromJSON config.path, config.json
 
@@ -166,39 +164,79 @@ define Module, ->
         module._loadPlugins().done()
         module
 
+  emitter = new EventEmitter
+  emitter.setMaxListeners Infinity
+
   @enumerable = no
   @
-    _emitter: new EventEmitter
+    _emitter: emitter
 
-    # Watch the files that match the given 'pattern'.
-    # Only the files that have been registered via 'module._watchFiles()' will be used.
-    _watchFiles: (options, callback) ->
-      options = include: options if isType options, String
-      options.include ?= "**/*"
-      Module._emitter.on "file event", ({ file, event }) ->
-        return if mm(file.path, options.include).length is 0
-        return if options.exclude? and mm(file.path, options.exclude).length > 0
-        callback file, event, options
-      return
+    _plugins: {}
 
 define Module.prototype, ->
   @options = frozen: yes
   @
     initialize: ->
 
-      return async.fulfill() if @isInitialized
+      return @_initializing if @_initializing
 
-      @isInitialized = yes
+      try @config = Config @path
+      catch error
+        log
+          .moat 1
+          .red @path
+          .moat 0
+          .white error.message
+          .moat 1
+        @_delete()
+        error.fatal = no
+        return async.reject error
 
-      @config = Config @path
-
-      async.all [
+      @_initializing = async.all [
         @_loadVersions()
         @_loadDependencies()
       ]
 
       .then =>
         @_loadPlugins()
+
+    watch: (pattern) ->
+
+      pattern = join @path, pattern
+
+      # BUGFIX: https://github.com/shama/gaze/issues/84
+      pattern = relative process.cwd(), pattern
+
+      promise = @_fs.adding or async.fulfill()
+
+      @_fs.adding = promise.then =>
+
+        deferred = async.defer()
+
+        @_fs.add pattern
+
+        @_fs.once "ready", =>
+          module = this
+          watched = @_fs.paths
+          newFiles = sync.reduce @_fs.watched(), {}, (newFiles, paths, dir) ->
+            sync.each paths, (path) ->
+              return if has watched, path
+              return unless sync.isFile path
+              newFiles[path] = File path, module
+              watched[path] = yes
+            newFiles
+
+          # log
+          #   .moat 1
+          #   .gray pattern
+          #   .white " found "
+          #   .green Object.keys(newFiles).length
+          #   .white " new files!"
+          #   .moat 1
+
+          deferred.resolve newFiles
+
+        deferred.promise
 
     toJSON: ->
 
@@ -212,11 +250,6 @@ define Module.prototype, ->
         return no
 
       unless @config?
-        log
-          .moat 1
-          .red @name
-          .white " has no config file"
-          .moat 1
         return no
 
       config =
@@ -245,108 +278,23 @@ define Module.prototype, ->
       "NODE_MODULES_NOT_A_DIRECTORY"
     ]
 
-    _watchFiles: (options) ->
+    _onFileEvent: (event, path) ->
 
-      deferred = async.defer()
+      if event is "renamed"
+        event = "added"
 
-      pattern = join @path, options.pattern
+      if event is "added"
+        return unless sync.isFile path
 
-      # BUGFIX: https://github.com/shama/gaze/issues/84
-      pattern = relative process.cwd(), pattern
+      else
+        return unless has @files, path
 
-      gaze = new Gaze pattern
+      file = File path, this
 
-      if log.isDebug and log.isVerbose
-        log.origin "lotus/module"
-        log.green "watching "
-        log.yellow pattern
-        log.moat 1
-
-      gaze.once "ready", =>
-
-        watched = gaze.watched()
-
-        paths = Object.keys watched
-
-        # Only use paths that point to files.
-        paths = sync.reduce paths, [], (paths, dir) ->
-          paths.concat sync.filter watched[dir], (path) -> sync.isFile path
-
-        # Create a map of File objects from the paths.
-        files = sync.reduce paths, {}, (files, path) =>
-          files[path] = File path, this
-          files
-
-        result = { pattern, files, watcher: gaze }
-
-        deferred.resolve result
-
-        options.onStartup? result
-
-        if isKind options.onReady, Function
-          async.each files, (file) ->
-            if log.isDebug and log.isVerbose
-              log.origin "lotus/module"
-              log.cyan "ready "
-              log.yellow relative process.cwd(), file.path
-              log.moat 1
-            options.onReady file
-
-      gaze.on "all", (event, path) =>
-        event = "added" if event is "renamed"
-        isValid = if event is "added" then sync.isFile path else @files[path]?
-        return unless isValid
-        file = File path, this
-        @_onFileEvent event, file, options
-
-      deferred.promise
-
-    _onFileEvent: (event, file, options) =>
-
-      log.origin "lotus/module"
-      log.cyan event
-      log " "
-      log.yellow relative process.cwd(), file.path
-      log.moat 1
-
-      isDeleted = no
-
-      eventQueue = file.eventQueue or async.fulfill()
-
-      enqueue = (callback, args...) ->
-        return no if !isKind callback, Function
-        eventQueue = async.when eventQueue, -> callback.apply null, [file].concat args
-        enqueue.wasCalled = yes
-
-      switch event
-
-        when "added"
-          enqueue options.onReady
-          enqueue options.onCreate
-
-        when "changed"
-          enqueue options.onChange
-
-        when "deleted"
-          isDeleted = yes
-          file.delete()
-          enqueue options.onDelete
-
-        else
-          throw Error "Unhandled file event: '#{event}'"
-
-      enqueue options.onSave if !isDeleted
-
-      enqueue options.onEvent, event
+      if event is "deleted"
+        file.delete()
 
       Module._emitter.emit "file event", { file, event }
-
-      if enqueue.wasCalled
-        eventQueue = eventQueue.fail (error) ->
-          async.catch error, ->
-            log.error error
-
-      file.eventQueue = eventQueue
 
     _delete: ->
       if log.isVerbose
@@ -359,16 +307,18 @@ define Module.prototype, ->
 
     _loadPlugins: ->
 
-      @config.loadPlugins (plugin, options) =>
+      @config.addPlugins Module._plugins
 
-        async.try => plugin this, options
+      @config.loadPlugins (plugin, options) =>
+        plugin this, options
 
       .fail (error) =>
         throw error if error.fatal isnt no
-        log.origin "lotus/module"
-        log.yellow @name
-        log " has no plugins."
-        log.moat 1
+        log
+          .moat 1
+          .yellow @name
+          .white " has no plugins."
+          .moat 1
 
     # TODO: Watch dependencies for changes.
     _loadDependencies: ->
@@ -415,7 +365,10 @@ define Module.prototype, ->
           # Ignore development dependencies.
           return if moduleJson.devDependencies?[path]?
 
-          dep = Module path
+          try dep = Module path
+
+          return unless dep?
+
           depJsonPath = join dep.path, "package.json"
 
           async.isDir dep.path
@@ -469,11 +422,11 @@ define Module.prototype, ->
           .fail (error) ->
             dep._onError error
 
-      .then =>
-        if log.isVerbose
-          log.moat 1
-          log "Module '#{@name}' loaded #{depCount} dependencies"
-          log.moat 1
+      # .then =>
+      #   if log.isVerbose
+      #     log.moat 1
+      #     log "Module '#{@name}' loaded #{depCount} dependencies"
+      #     log.moat 1
 
       # Handle errors for this module.
       .fail (error) =>
@@ -556,29 +509,5 @@ define Module.prototype, ->
         #     @emit
 
     _onError: (error) ->
+      return if inArray Module._ignoredErrorCodes, error.code
       async.catch error
-      _printError @name, error if log.isDebug and (log.isVerbose or not inArray Module._ignoredErrorCodes, error.code)
-
-isInitialized = no
-
-define exports,
-
-  initialize: ->
-    unless isInitialized
-      isInitialized = yes
-      File = File.initialize Module
-    Module
-
-_printError = (moduleName, error) ->
-  log.origin "lotus/module"
-  log.yellow moduleName
-  log " "
-  log.bgRed.white getType(error).name
-  log ": "
-  log error.message
-  log.moat 1
-
-_formatError = ->
-  stack:
-    exclude: ["**/lotus-require/src/**", "**/q/q.js", "**/nimble/nimble.js"]
-    filter: (frame) -> !frame.isNative() and !frame.isNode()

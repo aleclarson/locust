@@ -3,7 +3,7 @@ require "coffee-script/register"
 Stack = require "stack"
 Stack.initialize()
 
-{ isType, isKind } = require "type-utils"
+{ isType, isKind, assertType } = require "type-utils"
 { sync, async } = require "io"
 { log, color } = require "lotus-log"
 NamedFunction = require "named-function"
@@ -12,6 +12,7 @@ combine = require "combine"
 define = require "define"
 Path = require "path"
 
+module.exports =
 Config = NamedFunction "LotusConfig", (dir = ".") ->
 
   unless isKind this, Config
@@ -45,8 +46,6 @@ Config = NamedFunction "LotusConfig", (dir = ".") ->
 
   Config.fromJSON.call this, path, json
 
-module.exports = Config
-
 reservedPluginNames = KeyMirror ["plugins"]
 
 formatError = ->
@@ -67,15 +66,21 @@ define Config,
     if isKind plugins, Array
       plugins = KeyMirror plugins
 
-    json = value: json
-    plugins = value: plugins
-    implicitDependencies = value: implicitDependencies
-
     define this, ->
-      @options = frozen: yes
-      @ { path, plugins, implicitDependencies, json }
+      @frozen = yes
+      @
+        path: path
+        json: { value: json }
+        plugins: { value: plugins }
+        implicitDependencies: { value: implicitDependencies }
 
 define Config.prototype,
+
+  addPlugins: (plugins) ->
+    assertType plugins, Object
+    @plugins ?= {}
+    @plugins._add plugins if @plugins instanceof KeyMirror
+    @plugins[key] = plugin for key, plugin of plugins
 
   loadPlugins: (iterator) ->
 
@@ -86,7 +91,9 @@ define Config.prototype,
 
     promise = async.fulfill()
 
-    aliases = if @plugins instanceof KeyMirror then @plugins._keys else Object.keys @plugins
+    aliases =
+      if @plugins instanceof KeyMirror then @plugins._keys
+      else Object.keys @plugins
 
     async.each aliases, (alias) =>
 
@@ -94,16 +101,29 @@ define Config.prototype,
         throw Error "'#{alias}' is reserved and cannot be used as a plugin name."
 
       path = @plugins[alias]
-      plugin = module.optional path, (error) ->
-        error.message = "Cannot find plugin '#{path}'." if error.code is "REQUIRE_FAILED"
-        throw error
+
+      if isType path, String
+        plugin = module.optional path, (error) ->
+          error.message = "Cannot find plugin '#{path}'." if error.code is "REQUIRE_FAILED"
+          throw error
+        plugin.path = path
+
+      else if isType path, Function
+        plugin = path
 
       unless isKind plugin, Function
         throw Error "'#{alias}' failed to export a Function."
 
       plugin.alias = alias
-      plugin.path = path
-      iterator plugin, @json[alias] or {}
+      async.try =>
+        iterator plugin, @json[alias] or {}
+      .fail (error) =>
+        log
+          .moat 1
+          .red alias
+          .moat 0
+          .white error.message
+          .moat 1
 
     .fail (error) ->
       log.error error

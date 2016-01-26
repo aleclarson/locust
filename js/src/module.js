@@ -1,11 +1,10 @@
-var Config, EventEmitter, File, Gaze, Module, NamedFunction, SemVer, _formatError, _printError, async, basename, color, combine, define, dirname, getType, has, inArray, isAbsolute, isInitialized, isKind, isType, join, ln, log, lotus, mm, noop, plural, ref, ref1, ref2, ref3, relative, resolve, sync,
-  slice = [].slice;
+var Config, EventEmitter, Gaze, NamedFunction, SemVer, async, basename, color, combine, define, dirname, getType, has, inArray, isAbsolute, isKind, isType, join, ln, log, lotus, mm, noop, plural, ref, ref1, ref2, ref3, relative, resolve, setType, sync;
 
 lotus = require("lotus-require");
 
 ref = require("path"), join = ref.join, relative = ref.relative, resolve = ref.resolve, dirname = ref.dirname, basename = ref.basename, isAbsolute = ref.isAbsolute;
 
-ref1 = require("type-utils"), getType = ref1.getType, isKind = ref1.isKind, isType = ref1.isType;
+ref1 = require("type-utils"), getType = ref1.getType, setType = ref1.setType, isKind = ref1.isKind, isType = ref1.isType;
 
 ref2 = require("lotus-log"), log = ref2.log, color = ref2.color, ln = ref2.ln;
 
@@ -13,9 +12,9 @@ EventEmitter = require("events").EventEmitter;
 
 ref3 = require("io"), sync = ref3.sync, async = ref3.async;
 
-NamedFunction = require("named-function");
-
 Gaze = require("gaze").Gaze;
+
+NamedFunction = require("named-function");
 
 combine = require("combine");
 
@@ -35,15 +34,10 @@ mm = require("micromatch");
 
 Config = require("./config");
 
-File = require("./file");
-
-Module = NamedFunction("Module", function(name) {
-  var _reportedMissing, dependencies, dependers, error, files, isInitialized, path, versions;
+module.exports = global.Module = NamedFunction("Module", function(name) {
+  var fs, module, path;
   if (has(Module.cache, name)) {
     return Module.cache[name];
-  }
-  if (!isKind(this, Module)) {
-    return new Module(name);
   }
   if ((name[0] === "/") || (name.slice(0, 2) === "./")) {
     async["throw"]({
@@ -56,54 +50,38 @@ Module = NamedFunction("Module", function(name) {
     });
   }
   path = resolve(name);
-  if (sync.isDir(path)) {
-    if (log.isVerbose) {
-      log.moat(1);
-      log("Module created: ");
-      log.blue(name);
-      log.moat(1);
-    }
-    Module.cache[name] = this;
-  } else {
-    error = Error("'" + path + "' must be a directory.");
+  if (!sync.isDir(path)) {
+    throw Error("'" + path + "' must be a directory.");
   }
-  isInitialized = false;
-  files = {
-    value: {}
-  };
-  versions = {
-    value: {}
-  };
-  dependers = {
-    value: {}
-  };
-  dependencies = {
-    value: {}
-  };
-  _reportedMissing = {
-    value: {}
-  };
-  define(this, function() {
-    this.options = {
-      enumerable: false
-    };
-    return this({
-      _reportedMissing: _reportedMissing
-    });
+  Module.cache[name] = module = setType({}, Module);
+  fs = new Gaze;
+  fs.paths = Object.create(null);
+  fs.on("all", function(event, path) {
+    return module._onFileEvent(event, path);
   });
-  return define(this, {
-    name: name,
-    path: path,
-    isInitialized: isInitialized,
-    files: files,
-    versions: versions,
-    dependers: dependers,
-    dependencies: dependencies,
-    error: error
+  return define(module, function() {
+    this.options = {
+      configurable: false
+    };
+    this({
+      name: name,
+      path: path,
+      files: {},
+      versions: {},
+      dependers: {},
+      dependencies: {}
+    });
+    this.enumerable = false;
+    return this({
+      _fs: fs,
+      _initializing: null,
+      _reportedMissing: {}
+    });
   });
 });
 
 define(Module, function() {
+  var emitter;
   this.options = {
     configurable: false
   };
@@ -111,44 +89,49 @@ define(Module, function() {
     cache: {
       value: Object.create(null)
     },
+    watch: function(options, callback) {
+      if (isType(options, String)) {
+        options = {
+          include: options
+        };
+      }
+      if (options.include == null) {
+        options.include = "**/*";
+      }
+      Module._emitter.on("file event", function(arg) {
+        var event, file;
+        file = arg.file, event = arg.event;
+        if (mm(file.path, options.include).length === 0) {
+          return;
+        }
+        if ((options.exclude != null) && mm(file.path, options.exclude).length > 0) {
+          return;
+        }
+        return callback(file, event, options);
+      });
+    },
     initialize: function() {
       var moduleCount;
       moduleCount = 0;
       return async.readDir(lotus.path).then((function(_this) {
         return function(paths) {
-          return async.each(paths, function(path) {
-            var _module;
-            _module = Module(path);
-            return async.isDir(_module.path).then(function(isDir) {
-              if (isDir) {
-                return _module.initialize();
-              }
-              _module._delete();
-              return async["throw"]({
-                fatal: false,
-                error: Error("'" + _module.path + "' is not a directory."),
-                code: "NOT_A_DIRECTORY",
-                format: combine(_formatError(), {
-                  repl: {
-                    _module: _module,
-                    Module: Module
-                  }
-                })
-              });
-            }).then(function() {
+          return async.all(sync.map(paths, function(path) {
+            var module;
+            try {
+              module = Module(path);
+            } catch (_error) {}
+            if (module == null) {
+              return;
+            }
+            return module.initialize().then(function() {
               return moduleCount++;
             }).fail(function(error) {
-              return _module._onError(error);
+              return module._onError(error);
             });
-          });
+          }));
         };
       })(this)).then(function() {
-        if (log.isDebug) {
-          log.origin("lotus/module");
-          log.yellow("" + moduleCount);
-          log(" modules were initialized!");
-          return log.moat(1);
-        }
+        return log.moat(1).yellow(moduleCount).white(" modules were initialized!").moat(1);
       });
     },
     forFile: function(path) {
@@ -168,7 +151,7 @@ define(Module, function() {
         delete Module.cache[name];
         throw module.error;
       }
-      module.isInitialized = true;
+      module._initializing = async.fulfill();
       module.config = Config.fromJSON(config.path, config.json);
       module.dependencies = dependencies;
       return async.reduce(files, {}, function(files, path) {
@@ -189,30 +172,12 @@ define(Module, function() {
       });
     }
   });
+  emitter = new EventEmitter;
+  emitter.setMaxListeners(Infinity);
   this.enumerable = false;
   return this({
-    _emitter: new EventEmitter,
-    _watchFiles: function(options, callback) {
-      if (isType(options, String)) {
-        options = {
-          include: options
-        };
-      }
-      if (options.include == null) {
-        options.include = "**/*";
-      }
-      Module._emitter.on("file event", function(arg) {
-        var event, file;
-        file = arg.file, event = arg.event;
-        if (mm(file.path, options.include).length === 0) {
-          return;
-        }
-        if ((options.exclude != null) && mm(file.path, options.exclude).length > 0) {
-          return;
-        }
-        return callback(file, event, options);
-      });
-    }
+    _emitter: emitter,
+    _plugins: {}
   });
 });
 
@@ -222,14 +187,55 @@ define(Module.prototype, function() {
   };
   this({
     initialize: function() {
-      if (this.isInitialized) {
-        return async.fulfill();
+      var error;
+      if (this._initializing) {
+        return this._initializing;
       }
-      this.isInitialized = true;
-      this.config = Config(this.path);
-      return async.all([this._loadVersions(), this._loadDependencies()]).then((function(_this) {
+      try {
+        this.config = Config(this.path);
+      } catch (_error) {
+        error = _error;
+        log.moat(1).red(this.path).moat(0).white(error.message).moat(1);
+        this._delete();
+        error.fatal = false;
+        return async.reject(error);
+      }
+      return this._initializing = async.all([this._loadVersions(), this._loadDependencies()]).then((function(_this) {
         return function() {
           return _this._loadPlugins();
+        };
+      })(this));
+    },
+    watch: function(pattern) {
+      var promise;
+      pattern = join(this.path, pattern);
+      pattern = relative(process.cwd(), pattern);
+      promise = this._fs.adding || async.fulfill();
+      return this._fs.adding = promise.then((function(_this) {
+        return function() {
+          var deferred;
+          deferred = async.defer();
+          _this._fs.add(pattern);
+          _this._fs.once("ready", function() {
+            var module, newFiles, watched;
+            module = _this;
+            watched = _this._fs.paths;
+            newFiles = sync.reduce(_this._fs.watched(), {}, function(newFiles, paths, dir) {
+              sync.each(paths, function(path) {
+                if (has(watched, path)) {
+                  return;
+                }
+                if (!sync.isFile(path)) {
+                  return;
+                }
+                newFiles[path] = File(path, module);
+                return watched[path] = true;
+              });
+              return newFiles;
+            });
+            return deferred.resolve(newFiles);
+          });
+          return deferred.promise;
         };
       })(this));
     },
@@ -240,7 +246,6 @@ define(Module.prototype, function() {
         return false;
       }
       if (this.config == null) {
-        log.moat(1).red(this.name).white(" has no config file").moat(1);
         return false;
       }
       config = {
@@ -274,125 +279,29 @@ define(Module.prototype, function() {
   this.enumerable = false;
   return this({
     _ignoredErrorCodes: ["NOT_A_DIRECTORY", "NODE_MODULES_NOT_A_DIRECTORY"],
-    _watchFiles: function(options) {
-      var deferred, gaze, pattern;
-      deferred = async.defer();
-      pattern = join(this.path, options.pattern);
-      pattern = relative(process.cwd(), pattern);
-      gaze = new Gaze(pattern);
-      if (log.isDebug && log.isVerbose) {
-        log.origin("lotus/module");
-        log.green("watching ");
-        log.yellow(pattern);
-        log.moat(1);
+    _onFileEvent: function(event, path) {
+      var file;
+      if (event === "renamed") {
+        event = "added";
       }
-      gaze.once("ready", (function(_this) {
-        return function() {
-          var files, paths, result, watched;
-          watched = gaze.watched();
-          paths = Object.keys(watched);
-          paths = sync.reduce(paths, [], function(paths, dir) {
-            return paths.concat(sync.filter(watched[dir], function(path) {
-              return sync.isFile(path);
-            }));
-          });
-          files = sync.reduce(paths, {}, function(files, path) {
-            files[path] = File(path, _this);
-            return files;
-          });
-          result = {
-            pattern: pattern,
-            files: files,
-            watcher: gaze
-          };
-          deferred.resolve(result);
-          if (typeof options.onStartup === "function") {
-            options.onStartup(result);
-          }
-          if (isKind(options.onReady, Function)) {
-            return async.each(files, function(file) {
-              if (log.isDebug && log.isVerbose) {
-                log.origin("lotus/module");
-                log.cyan("ready ");
-                log.yellow(relative(process.cwd(), file.path));
-                log.moat(1);
-              }
-              return options.onReady(file);
-            });
-          }
-        };
-      })(this));
-      gaze.on("all", (function(_this) {
-        return function(event, path) {
-          var file, isValid;
-          if (event === "renamed") {
-            event = "added";
-          }
-          isValid = event === "added" ? sync.isFile(path) : _this.files[path] != null;
-          if (!isValid) {
-            return;
-          }
-          file = File(path, _this);
-          return _this._onFileEvent(event, file, options);
-        };
-      })(this));
-      return deferred.promise;
+      if (event === "added") {
+        if (!sync.isFile(path)) {
+          return;
+        }
+      } else {
+        if (!has(this.files, path)) {
+          return;
+        }
+      }
+      file = File(path, this);
+      if (event === "deleted") {
+        file["delete"]();
+      }
+      return Module._emitter.emit("file event", {
+        file: file,
+        event: event
+      });
     },
-    _onFileEvent: (function(_this) {
-      return function(event, file, options) {
-        var enqueue, eventQueue, isDeleted;
-        log.origin("lotus/module");
-        log.cyan(event);
-        log(" ");
-        log.yellow(relative(process.cwd(), file.path));
-        log.moat(1);
-        isDeleted = false;
-        eventQueue = file.eventQueue || async.fulfill();
-        enqueue = function() {
-          var args, callback;
-          callback = arguments[0], args = 2 <= arguments.length ? slice.call(arguments, 1) : [];
-          if (!isKind(callback, Function)) {
-            return false;
-          }
-          eventQueue = async.when(eventQueue, function() {
-            return callback.apply(null, [file].concat(args));
-          });
-          return enqueue.wasCalled = true;
-        };
-        switch (event) {
-          case "added":
-            enqueue(options.onReady);
-            enqueue(options.onCreate);
-            break;
-          case "changed":
-            enqueue(options.onChange);
-            break;
-          case "deleted":
-            isDeleted = true;
-            file["delete"]();
-            enqueue(options.onDelete);
-            break;
-          default:
-            throw Error("Unhandled file event: '" + event + "'");
-        }
-        if (!isDeleted) {
-          enqueue(options.onSave);
-        }
-        enqueue(options.onEvent, event);
-        Module._emitter.emit("file event", {
-          file: file,
-          event: event
-        });
-        if (enqueue.wasCalled) {
-          eventQueue = eventQueue.fail(function(error) {
-            return async["catch"](error, function() {
-              return log.error(error);
-            });
-          });
-        }
-        return file.eventQueue = eventQueue;
-      };
-    })(this),
     _delete: function() {
       if (log.isVerbose) {
         log.moat(1);
@@ -403,21 +312,17 @@ define(Module.prototype, function() {
       return delete Module.cache[this.name];
     },
     _loadPlugins: function() {
+      this.config.addPlugins(Module._plugins);
       return this.config.loadPlugins((function(_this) {
         return function(plugin, options) {
-          return async["try"](function() {
-            return plugin(_this, options);
-          });
+          return plugin(_this, options);
         };
       })(this)).fail((function(_this) {
         return function(error) {
           if (error.fatal !== false) {
             throw error;
           }
-          log.origin("lotus/module");
-          log.yellow(_this.name);
-          log(" has no plugins.");
-          return log.moat(1);
+          return log.moat(1).yellow(_this.name).white(" has no plugins.").moat(1);
         };
       })(this));
     },
@@ -477,7 +382,12 @@ define(Module.prototype, function() {
             if (((ref4 = moduleJson.devDependencies) != null ? ref4[path] : void 0) != null) {
               return;
             }
-            dep = Module(path);
+            try {
+              dep = Module(path);
+            } catch (_error) {}
+            if (dep == null) {
+              return;
+            }
             depJsonPath = join(dep.path, "package.json");
             return async.isDir(dep.path).then(function(isDir) {
               if (isDir) {
@@ -545,14 +455,6 @@ define(Module.prototype, function() {
             });
           });
         };
-      })(this)).then((function(_this) {
-        return function() {
-          if (log.isVerbose) {
-            log.moat(1);
-            log("Module '" + _this.name + "' loaded " + depCount + " dependencies");
-            return log.moat(1);
-          }
-        };
       })(this)).fail((function(_this) {
         return function(error) {
           return _this._onError(error);
@@ -609,45 +511,12 @@ define(Module.prototype, function() {
       })(this));
     },
     _onError: function(error) {
-      async["catch"](error);
-      if (log.isDebug && (log.isVerbose || !inArray(Module._ignoredErrorCodes, error.code))) {
-        return _printError(this.name, error);
+      if (inArray(Module._ignoredErrorCodes, error.code)) {
+        return;
       }
+      return async["catch"](error);
     }
   });
 });
-
-isInitialized = false;
-
-define(exports, {
-  initialize: function() {
-    if (!isInitialized) {
-      isInitialized = true;
-      File = File.initialize(Module);
-    }
-    return Module;
-  }
-});
-
-_printError = function(moduleName, error) {
-  log.origin("lotus/module");
-  log.yellow(moduleName);
-  log(" ");
-  log.bgRed.white(getType(error).name);
-  log(": ");
-  log(error.message);
-  return log.moat(1);
-};
-
-_formatError = function() {
-  return {
-    stack: {
-      exclude: ["**/lotus-require/src/**", "**/q/q.js", "**/nimble/nimble.js"],
-      filter: function(frame) {
-        return !frame.isNative() && !frame.isNode();
-      }
-    }
-  };
-};
 
 //# sourceMappingURL=../../map/src/module.map

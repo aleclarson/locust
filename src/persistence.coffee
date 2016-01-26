@@ -3,9 +3,6 @@
 lotus = require "lotus-require"
 log = require "lotus-log"
 
-Module = (require "./module").initialize()
-File = (require "./file").initialize()
-
 module.exports =
 
   toJSON: () ->
@@ -82,9 +79,9 @@ module.exports =
                 log.moat 1
 
     .then ->
-
-      log.origin "lotus/persistence"
-      log.green "imported "
-      log.yellow lotus.path + "/lotus-cache.json"
-      log.gray " (in #{Date.now() - startTime} ms)"
-      log.moat 1
+      log
+        .moat 1
+        .white "Loaded cache: "
+        .yellow lotus.path + "/lotus-cache.json"
+        .gray " (in #{Date.now() - startTime} ms)"
+        .moat 1

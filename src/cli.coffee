@@ -5,6 +5,8 @@ lotus = require "lotus-require"
 { isType } = require "type-utils"
 { log, ln, color } = require "lotus-log"
 
+require "./file"
+require "./module"
 
 #
 # Key bindings
@@ -34,12 +36,6 @@ log.indent = 2
 # log.repl.transform = "coffee"
 
 log.moat 1
-
-if log.isDebug
-  log "Port: "
-  log.green process.pid
-  log.moat 1
-
 
 #
 # Parse the terminal input for a command

@@ -17,12 +17,7 @@ Path = require "path"
 gaze = require "gaze"
 exit = require "exit"
 
-Module = require "./module"
-
 module.exports = (options) ->
-
-  # Resolve a circular dependency.
-  Module = Module.initialize options
 
   { toJSON, fromJSON } = require "./persistence"
 
@@ -36,20 +31,22 @@ module.exports = (options) ->
 
   else
 
-    log.origin "lotus/watch"
-    log.green "crawling "
-    log.yellow lotus.path
-    log.moat 1
+    log
+      .moat 1
+      .white "Crawling: "
+      .yellow lotus.path
+      .moat 1
 
     promise = Module.initialize()
 
   promise.then ->
 
-    log.origin "lotus/watch"
-    log.yellow Object.keys(Module.cache).length
-    log " modules were found"
-    log.gray " (in #{Date.now() - startTime} ms)"
-    log.moat 1
+    log
+      .moat 1
+      .yellow Object.keys(Module.cache).length
+      .white " modules were found"
+      .gray " (in #{Date.now() - startTime} ms)"
+      .moat 1
 
     toJSON().done() unless isCached
 
