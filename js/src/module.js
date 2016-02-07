@@ -1,10 +1,10 @@
-var Config, EventEmitter, Gaze, NamedFunction, SemVer, async, basename, color, combine, define, dirname, getType, has, inArray, isAbsolute, isKind, isType, join, ln, log, lotus, mm, noop, plural, ref, ref1, ref2, ref3, relative, resolve, setType, sync;
+var Config, EventEmitter, Gaze, NamedFunction, SemVer, SortedArray, assert, async, basename, color, combine, define, dirname, getType, has, inArray, isAbsolute, isKind, isType, join, ln, log, lotus, mm, noop, plural, ref, ref1, ref2, ref3, relative, resolve, setType, sync;
 
 lotus = require("lotus-require");
 
 ref = require("path"), join = ref.join, relative = ref.relative, resolve = ref.resolve, dirname = ref.dirname, basename = ref.basename, isAbsolute = ref.isAbsolute;
 
-ref1 = require("type-utils"), getType = ref1.getType, setType = ref1.setType, isKind = ref1.isKind, isType = ref1.isType;
+ref1 = require("type-utils"), assert = ref1.assert, getType = ref1.getType, setType = ref1.setType, isKind = ref1.isKind, isType = ref1.isType;
 
 ref2 = require("lotus-log"), log = ref2.log, color = ref2.color, ln = ref2.ln;
 
@@ -15,6 +15,8 @@ ref3 = require("io"), sync = ref3.sync, async = ref3.async;
 Gaze = require("gaze").Gaze;
 
 NamedFunction = require("named-function");
+
+SortedArray = require("sorted-array");
 
 combine = require("combine");
 
@@ -36,23 +38,19 @@ Config = require("./config");
 
 module.exports = global.Module = NamedFunction("Module", function(name) {
   var fs, module, path;
-  if (has(Module.cache, name)) {
-    return Module.cache[name];
-  }
-  if ((name[0] === "/") || (name.slice(0, 2) === "./")) {
-    async["throw"]({
-      error: Error("'name' cannot start with a '.' or '/' character"),
-      format: {
-        repl: {
-          name: name
-        }
-      }
-    });
-  }
+  assert(Module.cache[name] == null, {
+    name: name,
+    reason: "Module with that name already exists!"
+  });
+  assert((name[0] !== "/") && (name.slice(0, 2) !== "./"), {
+    name: name,
+    reason: "Module name cannot begin with `/` or `./`!"
+  });
   path = resolve(name);
-  if (!sync.isDir(path)) {
-    throw Error("'" + path + "' must be a directory.");
-  }
+  assert(sync.isDir(path), {
+    path: path,
+    reason: "Module path must be a directory!"
+  });
   Module.cache[name] = module = setType({}, Module);
   fs = new Gaze;
   fs.paths = Object.create(null);
@@ -110,66 +108,63 @@ define(Module, function() {
         return callback(file, event, options);
       });
     },
-    initialize: function() {
-      var moduleCount;
-      moduleCount = 0;
-      return async.readDir(lotus.path).then((function(_this) {
+    crawl: function(dir) {
+      var newModules;
+      newModules = SortedArray.comparing("name", []);
+      return async.readDir(dir).then((function(_this) {
         return function(paths) {
+          var ignoredErrors;
+          ignoredErrors = ["Could not find 'lotus-config' file!"];
           return async.all(sync.map(paths, function(path) {
-            var module;
+            var error, module;
             try {
               module = Module(path);
-            } catch (_error) {}
-            if (module == null) {
+            } catch (_error) {
+              error = _error;
               return;
             }
-            return module.initialize().then(function() {
-              return moduleCount++;
+            return async["try"](function() {
+              return module.initialize();
+            }).then(function() {
+              return newModules.insert(module);
             }).fail(function(error) {
-              return module._onError(error);
+              module._delete();
+              if (inArray(ignoredErrors, error.message)) {
+                return;
+              }
+              return log.moat(1).white("Module error: ").red(path).moat(0).gray((log.isVerbose ? error.stack : error.message)).moat(1);
             });
           }));
         };
       })(this)).then(function() {
-        return log.moat(1).yellow(moduleCount).white(" modules were initialized!").moat(1);
+        return newModules.array;
       });
     },
     forFile: function(path) {
       var name;
       path = relative(lotus.path, path);
       name = path.slice(0, path.indexOf("/"));
-      if (!has(Module.cache, name)) {
-        return null;
-      }
-      return Module(name);
+      return Module.cache[name];
     },
     fromJSON: function(json) {
       var config, dependencies, dependers, files, module, name;
       name = json.name, files = json.files, dependers = json.dependers, dependencies = json.dependencies, config = json.config;
-      module = Module(name);
-      if (module.error != null) {
-        delete Module.cache[name];
-        throw module.error;
+      module = Module.cache[name];
+      if (module == null) {
+        module = Module(name);
       }
       module._initializing = async.fulfill();
       module.config = Config.fromJSON(config.path, config.json);
       module.dependencies = dependencies;
-      return async.reduce(files, {}, function(files, path) {
+      module.files = sync.reduce(files, {}, function(files, path) {
         path = resolve(module.path, path);
         files[path] = File(path, module);
         return files;
-      }).then(function(files) {
-        module.files = files;
-        return async.reduce(dependers, {}, function(dependers, name) {
-          dependers[name] = Module(name);
-          return dependers;
-        }).then(function(dependers) {
-          return module.dependers = dependers;
-        });
-      }).then(function() {
-        module._loadPlugins().done();
-        return module;
       });
+      return {
+        module: module,
+        dependers: dependers
+      };
     }
   });
   emitter = new EventEmitter;
@@ -187,19 +182,10 @@ define(Module.prototype, function() {
   };
   this({
     initialize: function() {
-      var error;
       if (this._initializing) {
         return this._initializing;
       }
-      try {
-        this.config = Config(this.path);
-      } catch (_error) {
-        error = _error;
-        log.moat(1).red(this.path).moat(0).white(error.message).moat(1);
-        this._delete();
-        error.fatal = false;
-        return async.reject(error);
-      }
+      this.config = Config(this.path);
       return this._initializing = async.all([this._loadVersions(), this._loadDependencies()]).then((function(_this) {
         return function() {
           return _this._loadPlugins();
@@ -303,12 +289,6 @@ define(Module.prototype, function() {
       });
     },
     _delete: function() {
-      if (log.isVerbose) {
-        log.moat(1);
-        log("Module deleted: ");
-        log.red(this.name);
-        log.moat(1);
-      }
       return delete Module.cache[this.name];
     },
     _loadPlugins: function() {
@@ -319,10 +299,7 @@ define(Module.prototype, function() {
         };
       })(this)).fail((function(_this) {
         return function(error) {
-          if (error.fatal !== false) {
-            throw error;
-          }
-          return log.moat(1).yellow(_this.name).white(" has no plugins.").moat(1);
+          return log.moat(1).white("Module error: ").red(_this.name).moat(0).gray((log.isVerbose ? error.stack : error.message)).moat(1);
         };
       })(this));
     },
@@ -334,56 +311,39 @@ define(Module.prototype, function() {
       moduleJson = null;
       return async.isFile(moduleJsonPath).then((function(_this) {
         return function(isFile) {
-          if (isFile) {
-            moduleJson = require(moduleJsonPath);
-            return async.isDir(depDirPath);
-          }
-          _this._delete();
-          return async["throw"]({
-            fatal: false,
-            error: Error("'" + moduleJsonPath + "' is not a file."),
-            code: "PACKAGE_JSON_NOT_A_FILE",
-            format: function() {
-              return {
-                repl: {
-                  _module: _this,
-                  Module: Module
-                }
-              };
-            }
+          assert(isFile, {
+            path: moduleJsonPath,
+            module: _this,
+            reason: "Missing 'package.json' file!"
           });
+          moduleJson = require(moduleJsonPath);
+          return async.isDir(depDirPath);
         };
       })(this)).then((function(_this) {
         return function(isDir) {
-          if (isDir) {
-            return async.readDir(depDirPath);
+          if (!isDir) {
+            return;
           }
-          return async["throw"]({
-            fatal: false,
-            error: Error("'" + depDirPath + "' is not a directory."),
-            code: "NODE_MODULES_NOT_A_DIRECTORY",
-            format: function() {
-              return {
-                repl: {
-                  _module: dep,
-                  Module: Module
-                }
-              };
-            }
-          });
+          return async.readDir(depDirPath);
         };
       })(this)).then((function(_this) {
-        return function(paths) {
-          return async.each(paths, function(path, i) {
+        return function(names) {
+          if (names == null) {
+            return;
+          }
+          return async.each(names, function(name, i) {
             var dep, depJsonPath, ref4;
-            if (path[0] === ".") {
+            if (name[0] === ".") {
               return;
             }
-            if (((ref4 = moduleJson.devDependencies) != null ? ref4[path] : void 0) != null) {
+            if (((ref4 = moduleJson.devDependencies) != null ? ref4[name] : void 0) != null) {
               return;
             }
+            dep = Module.cache[name];
             try {
-              dep = Module(path);
+              if (dep == null) {
+                dep = Module(name);
+              }
             } catch (_error) {}
             if (dep == null) {
               return;
@@ -393,38 +353,14 @@ define(Module.prototype, function() {
               if (isDir) {
                 return async.isFile(depJsonPath);
               }
-              dep._delete();
-              return async["throw"]({
-                fatal: false,
-                error: Error("'" + dep.path + "' is not a directory."),
-                code: "NOT_A_DIRECTORY",
-                format: function() {
-                  return {
-                    repl: {
-                      _module: dep,
-                      Module: Module
-                    }
-                  };
-                }
-              });
+              return dep._delete();
             }).then(function(isFile) {
-              if (isFile) {
-                return async.read(depJsonPath);
-              }
-              dep._delete();
-              return async["throw"]({
-                fatal: false,
-                error: Error("'" + depJsonPath + "' is not a file."),
-                code: "PACKAGE_JSON_NOT_A_FILE",
-                format: function() {
-                  return {
-                    repl: {
-                      module: dep,
-                      Module: Module
-                    }
-                  };
-                }
+              assert(isFile, {
+                path: depJsonPath,
+                module: _this,
+                reason: "Could not find 'package.json' file!"
               });
+              return async.read(depJsonPath);
             }).then(function(contents) {
               var json;
               json = JSON.parse(contents);
@@ -451,13 +387,9 @@ define(Module.prototype, function() {
                 return log.moat(1);
               }
             }).fail(function(error) {
-              return dep._onError(error);
+              return log.moat(1).white("Dependency error: ").red(name).moat(0).gray(error.stack).moat(1);
             });
           });
-        };
-      })(this)).fail((function(_this) {
-        return function(error) {
-          return _this._onError(error);
         };
       })(this));
     },
@@ -467,25 +399,17 @@ define(Module.prototype, function() {
       tagDirPath = join(this.path, ".git/refs/tags");
       return async.isDir(tagDirPath).then((function(_this) {
         return function(isDir) {
-          if (isDir) {
-            return async.readDir(tagDirPath);
+          if (!isDir) {
+            return;
           }
-          return async["throw"]({
-            fatal: false,
-            error: Error("'" + tagDirPath + "' is not a directory."),
-            format: function() {
-              return {
-                repl: {
-                  _module: _this,
-                  Module: Module
-                }
-              };
-            }
-          });
+          return async.readDir(tagDirPath);
         };
       })(this)).then((function(_this) {
-        return function(paths) {
-          return async.each(paths, function(tag, i) {
+        return function(tags) {
+          if (tags == null) {
+            return;
+          }
+          return async.each(tags, function(tag, i) {
             if (!SemVer.valid(tag)) {
               return;
             }
@@ -497,24 +421,7 @@ define(Module.prototype, function() {
             });
           });
         };
-      })(this)).then((function(_this) {
-        return function() {
-          if (log.isDebug) {
-            log.origin("lotus/module");
-            log.yellow(relative(lotus.path, _this.path));
-            log(" loaded ");
-            log.yellow(versionCount);
-            log(" ", plural("version", versionCount));
-            return log.moat(1);
-          }
-        };
       })(this));
-    },
-    _onError: function(error) {
-      if (inArray(Module._ignoredErrorCodes, error.code)) {
-        return;
-      }
-      return async["catch"](error);
     }
   });
 });

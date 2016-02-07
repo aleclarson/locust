@@ -11,7 +11,8 @@ lotus = require "lotus-require"
 # require "lotus-repl"
 
 { log, ln, color } = require "lotus-log"
-{ sync } = require "io"
+{ sync, async } = require "io"
+
 semver = require "semver"
 Path = require "path"
 gaze = require "gaze"
@@ -25,11 +26,9 @@ module.exports = (options) ->
 
   startTime = Date.now()
 
-  if isCached
+  promise = if isCached then fromJSON() else async.resolve()
 
-    promise = fromJSON()
-
-  else
+  promise.then ->
 
     log
       .moat 1
@@ -37,27 +36,34 @@ module.exports = (options) ->
       .yellow lotus.path
       .moat 1
 
-    promise = Module.initialize()
+    Module.crawl lotus.path
 
-  promise.then ->
+  .then (newModules) ->
+
+    if newModules.length > 0
+
+      log
+        .moat 1
+        .white "Found #{newModules.length} modules: "
+        .moat 1
+      log.plusIndent 2
+      for module in newModules
+        log.green module.name
+        log.moat 1
+      log.popIndent()
+
+      toJSON().done()
 
     log
       .moat 1
-      .yellow Object.keys(Module.cache).length
-      .white " modules were found"
-      .gray " (in #{Date.now() - startTime} ms)"
+      .cyan "Listening for file changes..."
       .moat 1
 
-    toJSON().done() unless isCached
-
     isDirty = no
-
     Module._emitter.on "file event", ->
-
       isDirty = yes
 
     exit.on ->
-
       toJSON().done() if isDirty
 
   .done()

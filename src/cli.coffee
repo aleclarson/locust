@@ -2,7 +2,7 @@
 lotus = require "lotus-require"
 
 { async } = require "io"
-{ isType } = require "type-utils"
+{ isType, assert } = require "type-utils"
 { log, ln, color } = require "lotus-log"
 
 require "./file"
@@ -52,7 +52,6 @@ for arg in process.argv.slice 2
     command = arg
     break
 
-
 #
 # `--help` prints a list of valid commands
 #
@@ -92,6 +91,7 @@ config.loadPlugins (plugin, options) ->
   command = commands[command]
 
   if command?
+
     process.chdir lotus.path
 
     if isType command, Function
@@ -101,14 +101,10 @@ config.loadPlugins (plugin, options) ->
       require command
 
     else
-      async.throw
-        error: Error "'#{color.red command}' must be defined as a Function or String"
-        format: simple: yes
+      throw Error "'#{color.red command}' must be defined as a Function or String"
 
   else
     help()
-    async.throw
-      error: Error "'#{color.red command}' is an invalid command"
-      format: simple: yes
+    throw Error "'#{color.red command}' is an invalid command"
 
 .done()

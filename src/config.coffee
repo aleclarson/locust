@@ -3,7 +3,7 @@ require "coffee-script/register"
 Stack = require "stack"
 Stack.initialize()
 
-{ isType, isKind, assertType } = require "type-utils"
+{ isType, isKind, assert, assertType } = require "type-utils"
 { sync, async } = require "io"
 { log, color } = require "lotus-log"
 NamedFunction = require "named-function"
@@ -15,15 +15,9 @@ Path = require "path"
 module.exports =
 Config = NamedFunction "LotusConfig", (dir = ".") ->
 
-  unless isKind this, Config
-    return new Config dir
+  return new Config dir unless isKind this, Config
 
-  unless sync.isDir dir
-    async.throw
-      fatal: no
-      error: Error "'#{dir}' is not a directory."
-      code: "NOT_A_DIRECTORY"
-      format: formatError
+  assert sync.isDir(dir), { dir, reason: "'#{dir}' is not a directory!" }
 
   regex = /^lotus-config(\.[^\.]+)?$/
   paths = sync.readDir dir
@@ -35,23 +29,11 @@ Config = NamedFunction "LotusConfig", (dir = ".") ->
     json = module.optional path, (error) -> throw error if error.code isnt "REQUIRE_FAILED"
     if json isnt null then break
 
-  if json is null
-    async.throw
-      fatal: no
-      error: Error "Failed to find a 'lotus-config' file."
-      code: "NO_LOTUS_CONFIG"
-      format: combine formatError(),
-        repl: { dir, config: this }
-        stack: { limit: 1 }
+  assert json?, { path, reason: "Could not find 'lotus-config' file!" }
 
   Config.fromJSON.call this, path, json
 
 reservedPluginNames = KeyMirror ["plugins"]
-
-formatError = ->
-  stack:
-    exclude: ["**/lotus/src/config.*"]
-    filter: (frame) -> !frame.isEval() and !frame.isNative() and !frame.isNode()
 
 define Config,
 
@@ -120,10 +102,8 @@ define Config.prototype,
       .fail (error) =>
         log
           .moat 1
+          .white "Plugin failed: "
           .red alias
           .moat 0
-          .white error.message
+          .gray error.stack
           .moat 1
-
-    .fail (error) ->
-      log.error error

@@ -2,7 +2,7 @@
 lotus = require "lotus-require"
 
 { join, isAbsolute, dirname, basename, extname, relative } = require "path"
-{ isKind, setType } = require "type-utils"
+{ assert, isKind, setType } = require "type-utils"
 { async, sync } = require "io"
 { spawn } = require "child_process"
 
@@ -19,8 +19,7 @@ global.File = NamedFunction "File", (path, module) ->
 
   module ?= Module.forFile path
 
-  unless module?
-    throw TypeError "File '#{path}' belongs to a module not yet cached."
+  assert module?, { path, reason: "This file belongs to an unknown module!" }
 
   file = module.files[path]
   return file if file?
@@ -28,9 +27,17 @@ global.File = NamedFunction "File", (path, module) ->
   module.files[path] =
   file = setType {}, File
 
-  throw Error "'path' must be absolute." unless isAbsolute path
+  assert (isAbsolute path), { path, reason: "The file path must be absolute!" }
+
   name = basename path, extname path
   dir = relative module.path, dirname path
+
+  # log
+  #   .moat 1
+  #   .white "File found: "
+  #   .gray process.cwd(), "/"
+  #   .green relative process.cwd(), path
+  #   .moat 1
 
   define file, ->
 
@@ -129,13 +136,6 @@ define File.prototype, ->
 
           depCount++
 
-          # log
-          #   .moat 1
-          #   .yellow relative lotus.path, @path
-          #   .white " depends on "
-          #   .yellow relative lotus.path, dep.path
-          #   .moat 1
-
           promise = _installMissing @module, dep.module
 
           if promise?
@@ -162,9 +162,26 @@ define File.prototype, ->
       return if depFile is null
 
       if depPath[0] isnt "." and depPath.indexOf("/") < 0
-        try module = Module depPath
-        return unless module?
-        return File depFile, module
+
+        module = Module.cache[depPath]
+
+        unless module?
+
+          try
+            module = Module depPath
+            module.initialize()
+
+          catch error
+            # log
+            #   .moat 1
+            #   .white "Module error: "
+            #   .red depPath
+            #   .moat 0
+            #   .gray (if log.isVerbose then error.stack else error.message)
+            #   .moat 1
+            return
+
+        File depFile, module
 
       depDir = depFile
 
@@ -187,9 +204,10 @@ define File.prototype, ->
 
           done basename depDir
 
-      .then (module) =>
-
-        File depFile, Module module
+      .then (moduleName) =>
+        module = Module.cache[moduleName]
+        module ?= Module moduleName
+        File depFile, module
 
 ##
 ## HELPERS
