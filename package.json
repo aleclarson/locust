@@ -6,12 +6,13 @@
     "lotus": "./bin/lotus"
   },
   "dependencies": {
+    "chokidar": "aleclarson/chokidar",
     "coffee-script": "aleclarson/coffee-script#1.9.3",
     "combine": "aleclarson/combine#1.0.0",
     "define": "aleclarson/define#1.0.0",
     "exit": "aleclarson/exit#1.0.0",
     "finder": "aleclarson/finder#1.0.1",
-    "gaze": "^0.5.1",
+    "gaze": "^0.5.2",
     "has": "^1.0.1",
     "in-array": "^0.1.0",
     "io": "aleclarson/io#1.0.0",

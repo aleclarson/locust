@@ -50,6 +50,7 @@ module.exports = global.File = NamedFunction("File", function(path, module) {
       configurable: false
     };
     this({
+      contents: null,
       dependers: {},
       dependencies: {}
     });
@@ -64,7 +65,8 @@ module.exports = global.File = NamedFunction("File", function(path, module) {
       enumerable: false
     };
     return this({
-      _initializing: null
+      _initializing: null,
+      _reading: null
     });
   });
 });
@@ -104,14 +106,31 @@ define(File.prototype, function() {
       }
       return this._initializing = async.all([this._loadLastModified(), this._loadDeps()]);
     },
-    "delete": function() {
-      if (log.isVerbose) {
-        log.moat(1);
-        log("File deleted: ");
-        log.moat(0);
-        log.red(this.path);
-        log.moat(1);
+    read: function(options) {
+      if (options == null) {
+        options = {};
       }
+      if (options.force || (this._reading == null)) {
+        this.contents = null;
+        this._reading = async.read(this.path).then((function(_this) {
+          return function(contents) {
+            return _this.contents = contents;
+          };
+        })(this));
+      }
+      return this._reading;
+    },
+    "delete": function() {
+      sync.each(this.dependers, (function(_this) {
+        return function(file) {
+          return delete file.dependencies[_this.path];
+        };
+      })(this));
+      sync.each(this.dependencies, (function(_this) {
+        return function(file) {
+          return delete file.dependers[_this.path];
+        };
+      })(this));
       return delete this.module.files[this.path];
     },
     toJSON: function() {

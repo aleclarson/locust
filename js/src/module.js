@@ -1,4 +1,4 @@
-var Config, EventEmitter, Gaze, NamedFunction, SemVer, SortedArray, assert, async, basename, color, combine, define, dirname, getType, has, inArray, isAbsolute, isKind, isType, join, ln, log, lotus, mm, noop, plural, ref, ref1, ref2, ref3, relative, resolve, setType, sync;
+var Config, EventEmitter, NamedFunction, SemVer, SortedArray, assert, async, basename, chokidar, color, combine, define, dirname, getType, inArray, isAbsolute, isKind, isType, join, ln, log, lotus, mm, noop, plural, ref, ref1, ref2, ref3, relative, resolve, setType, sync;
 
 lotus = require("lotus-require");
 
@@ -12,11 +12,11 @@ EventEmitter = require("events").EventEmitter;
 
 ref3 = require("io"), sync = ref3.sync, async = ref3.async;
 
-Gaze = require("gaze").Gaze;
-
 NamedFunction = require("named-function");
 
 SortedArray = require("sorted-array");
+
+chokidar = require("chokidar");
 
 combine = require("combine");
 
@@ -30,14 +30,12 @@ plural = require("plural");
 
 noop = require("no-op");
 
-has = require("has");
-
 mm = require("micromatch");
 
 Config = require("./config");
 
 module.exports = global.Module = NamedFunction("Module", function(name) {
-  var fs, module, path;
+  var mod, path;
   assert(Module.cache[name] == null, {
     name: name,
     reason: "Module with that name already exists!"
@@ -51,13 +49,8 @@ module.exports = global.Module = NamedFunction("Module", function(name) {
     path: path,
     reason: "Module path must be a directory!"
   });
-  Module.cache[name] = module = setType({}, Module);
-  fs = new Gaze;
-  fs.paths = Object.create(null);
-  fs.on("all", function(event, path) {
-    return module._onFileEvent(event, path);
-  });
-  return define(module, function() {
+  Module.cache[name] = mod = setType({}, Module);
+  return define(mod, function() {
     this.options = {
       configurable: false
     };
@@ -71,8 +64,9 @@ module.exports = global.Module = NamedFunction("Module", function(name) {
     });
     this.enumerable = false;
     return this({
-      _fs: fs,
+      _patterns: Object.create(null),
       _initializing: null,
+      _retryWatcher: null,
       _reportedMissing: {}
     });
   });
@@ -109,36 +103,59 @@ define(Module, function() {
       });
     },
     crawl: function(dir) {
-      var newModules;
-      newModules = SortedArray.comparing("name", []);
-      return async.readDir(dir).then((function(_this) {
-        return function(paths) {
-          var ignoredErrors;
-          ignoredErrors = ["Could not find 'lotus-config' file!"];
-          return async.all(sync.map(paths, function(path) {
-            var error, module;
-            try {
-              module = Module(path);
-            } catch (_error) {
-              error = _error;
-              return;
-            }
-            return async["try"](function() {
-              return module.initialize();
-            }).then(function() {
-              return newModules.insert(module);
-            }).fail(function(error) {
-              module._delete();
-              if (inArray(ignoredErrors, error.message)) {
-                return;
-              }
-              return log.moat(1).white("Module error: ").red(path).moat(0).gray((log.isVerbose ? error.stack : error.message)).moat(1);
-            });
-          }));
-        };
-      })(this)).then(function() {
-        return newModules.array;
+      var deferred, fs, newModules, promises;
+      if (Module.fs != null) {
+        throw Error("Already crawled.");
+      }
+      promises = [];
+      newModules = SortedArray([], function(a, b) {
+        a = a.name.toLowerCase();
+        b = b.name.toLowerCase();
+        if (a > b) {
+          return 1;
+        } else {
+          return -1;
+        }
       });
+      fs = Module.fs = chokidar.watch(dir, {
+        depth: 0
+      });
+      fs.on("addDir", function(path) {
+        var error, mod, name, promise;
+        if (path === lotus.path) {
+          return;
+        }
+        name = relative(lotus.path, path);
+        try {
+          mod = Module(name);
+        } catch (_error) {
+          error = _error;
+          return;
+        }
+        if (mod == null) {
+          return;
+        }
+        promise = async["try"](function() {
+          return mod.initialize();
+        }).then(function() {
+          return newModules.insert(mod);
+        }).fail(function(error) {
+          return mod._retryInitialize(error);
+        });
+        return promises.push(promise);
+      });
+      fs.on("unlinkDir", function(path) {
+        var name, ref4;
+        name = relative(lotus.path, path);
+        return (ref4 = Module.cache[name]) != null ? ref4._delete() : void 0;
+      });
+      deferred = async.defer();
+      fs.once("ready", function() {
+        return async.all(promises).then(function() {
+          return deferred.resolve(newModules.array);
+        });
+      });
+      return deferred.promise;
     },
     forFile: function(path) {
       var name;
@@ -147,22 +164,22 @@ define(Module, function() {
       return Module.cache[name];
     },
     fromJSON: function(json) {
-      var config, dependencies, dependers, files, module, name;
+      var config, dependencies, dependers, files, mod, name;
       name = json.name, files = json.files, dependers = json.dependers, dependencies = json.dependencies, config = json.config;
-      module = Module.cache[name];
-      if (module == null) {
-        module = Module(name);
+      mod = Module.cache[name];
+      if (mod == null) {
+        mod = Module(name);
       }
-      module._initializing = async.fulfill();
-      module.config = Config.fromJSON(config.path, config.json);
-      module.dependencies = dependencies;
-      module.files = sync.reduce(files, {}, function(files, path) {
-        path = resolve(module.path, path);
-        files[path] = File(path, module);
+      mod._initializing = async.fulfill();
+      mod.config = Config.fromJSON(config.path, config.json);
+      mod.dependencies = dependencies;
+      mod.files = sync.reduce(files, {}, function(files, path) {
+        path = resolve(mod.path, path);
+        files[path] = File(path, mod);
         return files;
       });
       return {
-        module: module,
+        module: mod,
         dependers: dependers
       };
     }
@@ -185,50 +202,52 @@ define(Module.prototype, function() {
       if (this._initializing) {
         return this._initializing;
       }
-      this.config = Config(this.path);
-      return this._initializing = async.all([this._loadVersions(), this._loadDependencies()]).then((function(_this) {
+      return this._initializing = async["try"]((function(_this) {
+        return function() {
+          _this.config = Config(_this.path);
+          return async.all([_this._loadVersions(), _this._loadDependencies()]);
+        };
+      })(this)).then((function(_this) {
         return function() {
           return _this._loadPlugins();
+        };
+      })(this)).fail((function(_this) {
+        return function(error) {
+          _this._initializing = null;
+          throw error;
         };
       })(this));
     },
     watch: function(pattern) {
-      var promise;
+      var deferred, files, fs, onAdd, self;
       pattern = join(this.path, pattern);
-      pattern = relative(process.cwd(), pattern);
-      promise = this._fs.adding || async.fulfill();
-      return this._fs.adding = promise.then((function(_this) {
-        return function() {
-          var deferred;
-          deferred = async.defer();
-          _this._fs.add(pattern);
-          _this._fs.once("ready", function() {
-            var module, newFiles, watched;
-            module = _this;
-            watched = _this._fs.paths;
-            newFiles = sync.reduce(_this._fs.watched(), {}, function(newFiles, paths, dir) {
-              sync.each(paths, function(path) {
-                if (has(watched, path)) {
-                  return;
-                }
-                if (!sync.isFile(path)) {
-                  return;
-                }
-                newFiles[path] = File(path, module);
-                return watched[path] = true;
-              });
-              return newFiles;
-            });
-            return deferred.resolve(newFiles);
-          });
-          return deferred.promise;
-        };
-      })(this));
+      if (this._patterns[pattern] != null) {
+        return this._patterns[pattern].adding;
+      }
+      fs = this._patterns[pattern] = chokidar.watch();
+      deferred = async.defer();
+      self = this;
+      files = Object.create(null);
+      fs.on("add", onAdd = function(path) {
+        if (!sync.isFile(path)) {
+          return;
+        }
+        return files[path] = File(path, self);
+      });
+      fs.once("ready", function() {
+        fs.removeListener("add", onAdd);
+        deferred.fulfill(files);
+        return fs.on("all", function(event, path) {
+          return self._onFileEvent(event, path);
+        });
+      });
+      fs.add(pattern);
+      return fs.adding = deferred.promise;
     },
     toJSON: function() {
       var config, dependers, files;
       if (this.error != null) {
-        log.moat(1).red(module.name).white(" threw an error: ").gray(this.error.message).moat(1);
+        log.moat(1).red(this.name).white(" threw an error: ").gray(this.error.message).moat(1);
         return false;
       }
       if (this.config == null) {
@@ -267,28 +286,75 @@ define(Module.prototype, function() {
     _ignoredErrorCodes: ["NOT_A_DIRECTORY", "NODE_MODULES_NOT_A_DIRECTORY"],
     _onFileEvent: function(event, path) {
       var file;
-      if (event === "renamed") {
-        event = "added";
-      }
-      if (event === "added") {
+      if (event === "add") {
         if (!sync.isFile(path)) {
           return;
         }
       } else {
-        if (!has(this.files, path)) {
+        if (this.files[path] == null) {
           return;
         }
       }
       file = File(path, this);
-      if (event === "deleted") {
+      if (event === "unlink") {
         file["delete"]();
       }
-      return Module._emitter.emit("file event", {
-        file: file,
-        event: event
+      return process.nextTick(function() {
+        return Module._emitter.emit("file event", {
+          file: file,
+          event: event
+        });
       });
     },
+    _retryInitialize: function(error) {
+      var silentErrors;
+      if (this._deleted) {
+        return;
+      }
+      silentErrors = ["Could not find 'lotus-config' file!"];
+      if (!inArray(silentErrors, error.message)) {
+        log.moat(1).white("Module error: ").red(this.name).moat(0).gray((log.isVerbose ? error.stack : error.message)).moat(1);
+      }
+      if (this._retryWatcher == null) {
+        this._retryWatcher = chokidar.watch(this.path, {
+          depth: 1
+        });
+        this._retryWatcher.once("ready", (function(_this) {
+          return function() {
+            return _this._retryWatcher.on("all", function(event, path) {
+              return async["try"](function() {
+                return _this.initialize();
+              }).then(function() {
+                _this._retryWatcher.close();
+                return _this._retryWatcher = null;
+              }).fail(function(error) {
+                return _this._retryInitialize(error);
+              });
+            });
+          };
+        })(this));
+      }
+    },
     _delete: function() {
+      if (this._deleted) {
+        return;
+      }
+      this._deleted = true;
+      this._retryWatcher.close();
+      this._retryWatcher = null;
+      sync.each(this.dependers, (function(_this) {
+        return function(mod) {
+          return delete mod.dependencies[_this.name];
+        };
+      })(this));
+      sync.each(this.dependencies, (function(_this) {
+        return function(mod) {
+          return delete mod.dependers[_this.name];
+        };
+      })(this));
+      sync.each(this.files, function(file) {
+        return file["delete"]();
+      });
       return delete Module.cache[this.name];
     },
     _loadPlugins: function() {

@@ -81,7 +81,9 @@ module.exports =
       ]
 
       loadedModules = SortedArray [], (a, b) ->
-        if a.module.name > b.module.name then 1 else -1
+        a = a.module.name.toLowerCase()
+        b = b.module.name.toLowerCase()
+        if a > b then 1 else -1
 
       async.all sync.map json.modules, (module) ->
 

@@ -13,17 +13,16 @@ lotus = require "lotus-require"
 { log, color, ln } = require "lotus-log"
 { EventEmitter } = require "events"
 { sync, async } = require "io"
-{ Gaze } = require "gaze"
 
 NamedFunction = require "named-function"
 SortedArray = require "sorted-array"
+chokidar = require "chokidar"
 combine = require "combine"
 inArray = require "in-array"
 SemVer = require "semver"
 define = require "define"
 plural = require "plural"
 noop = require "no-op"
-has = require "has"
 mm = require "micromatch"
 
 Config = require "./config"
@@ -40,14 +39,9 @@ global.Module = NamedFunction "Module", (name) ->
   assert (sync.isDir path), { path, reason: "Module path must be a directory!" }
 
   Module.cache[name] =
-  module = setType {}, Module
+  mod = setType {}, Module
 
-  fs = new Gaze
-  fs.paths = Object.create null
-  fs.on "all", (event, path) ->
-    module._onFileEvent event, path
-
-  define module, ->
+  define mod, ->
 
     @options = configurable: no
     @
@@ -60,8 +54,10 @@ global.Module = NamedFunction "Module", (name) ->
 
     @enumerable = no
     @
-      _fs: fs
+      _deleted: no
+      _patterns: Object.create null
       _initializing: null
+      _retryWatcher: null
       _reportedMissing: {}
 
 define Module, ->
@@ -83,48 +79,51 @@ define Module, ->
       return
 
     crawl: (dir) ->
-      newModules = SortedArray.comparing "name", []
 
-      async.readDir dir
+      if Module.fs?
+        throw Error "Already crawled."
 
-      .then (paths) =>
-        ignoredErrors = [
-          "Could not find 'lotus-config' file!"
-        ]
+      promises = []
+      newModules = SortedArray [], (a, b) ->
+        a = a.name.toLowerCase()
+        b = b.name.toLowerCase()
+        if a > b then 1 else -1
 
-        async.all sync.map paths, (path) ->
+      fs = Module.fs = chokidar.watch dir, { depth: 0 }
 
-          try module = Module path
+      fs.on "addDir", (path) ->
 
-          catch error
-            # log
-            #   .moat 1
-            #   .white "Module error: "
-            #   .red path
-            #   .moat 0
-            #   .gray (if log.isVerbose then error.stack else error.message)
-            #   .moat 1
-            return
+        return if path is lotus.path
 
-          async.try ->
-            module.initialize()
+        name = relative lotus.path, path
 
-          .then ->
-            newModules.insert module
+        try mod = Module name
+        catch error then return
+        return unless mod?
 
-          .fail (error) ->
-            module._delete()
-            return if inArray ignoredErrors, error.message
-            log
-              .moat 1
-              .white "Module error: "
-              .red path
-              .moat 0
-              .gray (if log.isVerbose then error.stack else error.message)
-              .moat 1
+        promise = async.try ->
+          mod.initialize()
 
-      .then ->
-        newModules.array
+        .then ->
+          newModules.insert mod
+
+        .fail (error) ->
+          mod._retryInitialize error
+
+        promises.push promise
+
+      fs.on "unlinkDir", (path) ->
+        name = relative lotus.path, path
+        Module.cache[name]?._delete()
+
+      deferred = async.defer()
+
+      fs.once "ready", ->
+        async.all promises
+        .then ->
+          deferred.resolve newModules.array
+
+      deferred.promise
 
     forFile: (path) ->
       path = relative lotus.path, path
@@ -135,21 +134,21 @@ define Module, ->
 
       { name, files, dependers, dependencies, config } = json
 
-      module = Module.cache[name]
-      module ?= Module name
+      mod = Module.cache[name]
+      mod ?= Module name
 
       # TODO Might not want this...
-      module._initializing = async.fulfill()
+      mod._initializing = async.fulfill()
 
-      module.config = Config.fromJSON config.path, config.json
-      module.dependencies = dependencies
+      mod.config = Config.fromJSON config.path, config.json
+      mod.dependencies = dependencies
 
-      module.files = sync.reduce files, {}, (files, path) ->
-        path = resolve module.path, path
-        files[path] = File path, module
+      mod.files = sync.reduce files, {}, (files, path) ->
+        path = resolve mod.path, path
+        files[path] = File path, mod
         files
 
-      { module, dependers }
+      { module: mod, dependers }
 
   emitter = new EventEmitter
   emitter.setMaxListeners Infinity
@@ -167,67 +166,59 @@ define Module.prototype, ->
 
       return @_initializing if @_initializing
 
-      @config = Config @path
+      @_initializing = async.try =>
 
-      @_initializing = async.all [
-        @_loadVersions()
-        @_loadDependencies()
-      ]
+        @config = Config @path
+
+        async.all [
+          @_loadVersions()
+          @_loadDependencies()
+        ]
 
       .then =>
         @_loadPlugins()
+
+      .fail (error) =>
+        @_initializing = null
+        throw error
 
     watch: (pattern) ->
 
       pattern = join @path, pattern
 
-      # BUGFIX: https://github.com/shama/gaze/issues/84
-      pattern = relative process.cwd(), pattern
+      if @_patterns[pattern]?
+        return @_patterns[pattern].adding
 
-      promise = @_fs.adding or async.fulfill()
+      fs = @_patterns[pattern] = chokidar.watch()
 
-      @_fs.adding = promise.then =>
+      deferred = async.defer()
 
-        deferred = async.defer()
+      self = this
 
-        # log
-        #   .moat 1
-        #   .white "Watching: "
-        #   .gray process.cwd(), "/"
-        #   .pink pattern
-        #   .moat 1
+      files = Object.create null
 
-        @_fs.add pattern
+      fs.on "add", onAdd = (path) ->
+        return unless sync.isFile path
+        files[path] = File path, self
 
-        @_fs.once "ready", =>
-          module = this
-          watched = @_fs.paths
-          newFiles = sync.reduce @_fs.watched(), {}, (newFiles, paths, dir) ->
-            sync.each paths, (path) ->
-              return if has watched, path
-              return unless sync.isFile path
-              newFiles[path] = File path, module
-              watched[path] = yes
-            newFiles
+      fs.once "ready", ->
 
-          # log
-          #   .moat 1
-          #   .gray pattern
-          #   .white " found "
-          #   .green Object.keys(newFiles).length
-          #   .white " new files!"
-          #   .moat 1
+        fs.removeListener "add", onAdd
 
-          deferred.resolve newFiles
+        deferred.fulfill files
 
-        deferred.promise
+        fs.on "all", (event, path) ->
+          self._onFileEvent event, path
+
+      fs.add pattern
+      fs.adding = deferred.promise
 
     toJSON: ->
 
       if @error?
         log
           .moat 1
-          .red module.name
+          .red @name
           .white " threw an error: "
           .gray @error.message
           .moat 1
@@ -264,25 +255,64 @@ define Module.prototype, ->
 
     _onFileEvent: (event, path) ->
 
-      if event is "renamed"
-        event = "added"
-
-      if event is "added"
+      if event is "add"
         return unless sync.isFile path
 
       else
-        return unless has @files, path
+        return unless @files[path]?
 
       file = File path, this
 
-      if event is "deleted"
+      if event is "unlink"
         file.delete()
 
-      Module._emitter.emit "file event", { file, event }
+      process.nextTick ->
+        Module._emitter.emit "file event", { file, event }
+
+    _retryInitialize: (error) ->
+      return if @_deleted
+      silentErrors = [
+        "Could not find 'lotus-config' file!"
+      ]
+      unless inArray silentErrors, error.message
+        log
+          .moat 1
+          .white "Module error: "
+          .red @name
+          .moat 0
+          .gray (if log.isVerbose then error.stack else error.message)
+          .moat 1
+      unless @_retryWatcher?
+        @_retryWatcher = chokidar.watch @path, { depth: 1 }
+        @_retryWatcher.once "ready", =>
+          @_retryWatcher.on "all", (event, path) =>
+            async.try =>
+              @initialize()
+            .then =>
+              @_retryWatcher.close()
+              @_retryWatcher = null
+            .fail (error) =>
+              @_retryInitialize error
+      return
 
     _delete: ->
+
+      return if @_deleted
+      @_deleted = yes
+
+      @_retryWatcher.close()
+      @_retryWatcher = null
+
+      sync.each @dependers, (mod) =>
+        delete mod.dependencies[@name]
+
+      sync.each @dependencies, (mod) =>
+        delete mod.dependers[@name]
+
+      sync.each @files, (file) ->
+        file.delete()
+
       delete Module.cache[@name]
-      # TODO: Delete any references that other modules have to this module.
 
     _loadPlugins: ->
 
@@ -414,18 +444,18 @@ define Module.prototype, ->
         #
         #     switch event
         #
-        #       when "added"
+        #       when "add"
         #         style = "green"
         #         @versions[version] = lastModified: new Date
         #         # TODO: If `--force` was used, replace old versions with this version.
         #         # TODO: Else, log that a new version is available and list modules that might be interested.
         #
-        #       when "deleted"
+        #       when "unlink"
         #         style = "red"
         #         delete @versions[version]
         #         # TODO: Warn if any module relies on this version.
         #
-        #       when "changed"
+        #       when "change"
         #         style = "blue"
         #         @versions[version].lastModified = new Date
         #         # TODO: Reinstall this version for any modules that rely on it.

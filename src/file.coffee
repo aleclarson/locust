@@ -43,14 +43,22 @@ global.File = NamedFunction "File", (path, module) ->
 
     @options = configurable: no
     @
+      contents: null
       dependers: {}
       dependencies: {}
 
     @writable = no
-    @ { name, dir, path, module }
+    @ {
+      name
+      dir
+      path
+      module
+    }
 
     @options = enumerable: no
-    @ { _initializing: null }
+    @
+      _initializing: null
+      _reading: null
 
 define File,
 
@@ -89,15 +97,22 @@ define File.prototype, ->
         @_loadDeps()
       ]
 
+    read: (options = {}) ->
+      if options.force or not @_reading?
+        @contents = null
+        @_reading = async.read @path
+        .then (contents) => @contents = contents
+      @_reading
+
     delete: ->
-      if log.isVerbose
-        log.moat 1
-        log "File deleted: "
-        log.moat 0
-        log.red @path
-        log.moat 1
+
+      sync.each @dependers, (file) =>
+        delete file.dependencies[@path]
+
+      sync.each @dependencies, (file) =>
+        delete file.dependers[@path]
+
       delete @module.files[@path]
-      # TODO: Delete any references that other modules have to this module.
 
     toJSON: ->
       dependers = Object.keys @dependers
