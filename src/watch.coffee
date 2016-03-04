@@ -5,7 +5,7 @@
 # TODO: A command that lists the dependencies or dependers of each module.
 # TODO: Notify when dependencies exist that aren't being used.
 
-lotus = require "lotus-require"
+Lotus = require "./index"
 
 # TODO: Stop 'lotus-repl' from preventing CTRL+C.
 # require "lotus-repl"
@@ -15,16 +15,17 @@ lotus = require "lotus-require"
 
 semver = require "semver"
 Path = require "path"
-gaze = require "gaze"
 exit = require "exit"
 
 module.exports = (options) ->
 
   { toJSON, fromJSON } = require "./persistence"
 
-  isCached = sync.isFile "lotus-cache.json"
+  isDirty = no
+  Lotus.Module._emitter.on "file event", -> isDirty = yes
+  exit.on -> toJSON().done() if isDirty
 
-  startTime = Date.now()
+  isCached = sync.isFile "lotus-cache.json"
 
   promise = if isCached then fromJSON() else async.resolve()
 
@@ -33,10 +34,10 @@ module.exports = (options) ->
     log
       .moat 1
       .white "Crawling: "
-      .yellow lotus.path
+      .yellow Lotus.path
       .moat 1
 
-    Module.crawl lotus.path
+    Lotus.Module.crawl Lotus.path
 
   .then (newModules) ->
 
@@ -58,12 +59,5 @@ module.exports = (options) ->
       .moat 1
       .cyan "Listening for file changes..."
       .moat 1
-
-    isDirty = no
-    Module._emitter.on "file event", ->
-      isDirty = yes
-
-    exit.on ->
-      toJSON().done() if isDirty
 
   .done()

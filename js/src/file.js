@@ -1,7 +1,7 @@
-var Finder, NODE_PATHS, NamedFunction, _findDepPath, _installMissing, _unshiftContext, assert, async, basename, define, dirname, extname, inArray, isAbsolute, isKind, join, log, lotus, plural, ref, ref1, ref2, relative, setType, spawn, sync,
+var Finder, Lotus, NODE_PATHS, NamedFunction, _findDepPath, _installMissing, _unshiftContext, assert, async, basename, define, dirname, extname, inArray, isAbsolute, isKind, join, log, plural, ref, ref1, ref2, relative, setType, spawn, sync,
   slice = [].slice;
 
-lotus = require("lotus-require");
+Lotus = require("./index");
 
 ref = require("path"), join = ref.join, isAbsolute = ref.isAbsolute, dirname = ref.dirname, basename = ref.basename, extname = ref.extname, relative = ref.relative;
 
@@ -25,26 +25,26 @@ plural = require("plural");
 
 log = require("lotus-log");
 
-module.exports = global.File = NamedFunction("File", function(path, module) {
+module.exports = Lotus.File = NamedFunction("File", function(path, mod) {
   var dir, file, name;
-  if (module == null) {
-    module = Module.forFile(path);
+  if (mod == null) {
+    mod = Lotus.Module.forFile(path);
   }
-  assert(module != null, {
+  assert(mod != null, {
     path: path,
     reason: "This file belongs to an unknown module!"
   });
-  file = module.files[path];
+  file = mod.files[path];
   if (file != null) {
     return file;
   }
-  module.files[path] = file = setType({}, File);
+  mod.files[path] = file = setType({}, File);
   assert(isAbsolute(path), {
     path: path,
     reason: "The file path must be absolute!"
   });
   name = basename(path, extname(path));
-  dir = relative(module.path, dirname(path));
+  dir = relative(mod.path, dirname(path));
   return define(file, function() {
     this.options = {
       configurable: false
@@ -59,7 +59,7 @@ module.exports = global.File = NamedFunction("File", function(path, module) {
       name: name,
       dir: dir,
       path: path,
-      module: module
+      module: mod
     });
     this.options = {
       enumerable: false
@@ -71,20 +71,20 @@ module.exports = global.File = NamedFunction("File", function(path, module) {
   });
 });
 
-define(File, {
+define(Lotus.File, {
   fromJSON: function(file, json) {
     if (json.lastModified != null) {
       file.isInitialized = true;
       file.lastModified = json.lastModified;
     }
     return async.reduce(json.dependers, {}, function(dependers, path) {
-      dependers[path] = File(path);
+      dependers[path] = Lotus.File(path);
       return dependers;
     }).then(function(dependers) {
       return file.dependers = dependers;
     }).then(function() {
       return async.reduce(json.dependencies, {}, function(dependencies, path) {
-        dependencies[path] = File(path);
+        dependencies[path] = Lotus.File(path);
         return dependencies;
       });
     }).then(function(dependencies) {
@@ -94,7 +94,7 @@ define(File, {
   }
 });
 
-define(File.prototype, function() {
+define(Lotus.File.prototype, function() {
   this.options = {
     configurable: false,
     writable: false
@@ -181,40 +181,35 @@ define(File.prototype, function() {
             return promise;
           });
         };
-      })(this)).then((function(_this) {
-        return function() {
-          if (log.isDebug && log.isVerbose) {
-            log.origin("lotus/file");
-            log.yellow(relative(lotus.path, _this.path));
-            log(" has ");
-            log.yellow(depCount);
-            log(" ", plural("dependency", depCount));
-            return log.moat(1);
-          }
-        };
       })(this));
     },
     _loadDep: async.promised(function(depPath) {
-      var depDir, depFile, error, module;
+      var depDir, depFile, error, mod;
       if (NODE_PATHS.indexOf(depPath) >= 0) {
         return;
       }
-      depFile = lotus.resolve(depPath, this.path);
+      depFile = Lotus.resolve(depPath, this.path);
       if (depFile === null) {
         return;
       }
       if (depPath[0] !== "." && depPath.indexOf("/") < 0) {
-        module = Module.cache[depPath];
-        if (module == null) {
+        mod = Lotus.Module.cache[depPath];
+        if (mod == null) {
           try {
-            module = Module(depPath);
-            module.initialize();
+            mod = Lotus.Module(depPath);
           } catch (_error) {
             error = _error;
+          }
+          if (mod == null) {
             return;
           }
+          async["try"](function() {
+            return mod.initialize();
+          }).fail(function(error) {
+            return mod._retryInitialize(error);
+          });
         }
-        File(depFile, module);
+        Lotus.File(depFile, mod);
       }
       depDir = depFile;
       return async.loop((function(_this) {
@@ -234,12 +229,12 @@ define(File.prototype, function() {
           });
         };
       })(this)).then((function(_this) {
-        return function(moduleName) {
-          module = Module.cache[moduleName];
-          if (module == null) {
-            module = Module(moduleName);
+        return function(modName) {
+          mod = Lotus.Module.cache[modName];
+          if (mod == null) {
+            mod = Lotus.Module(modName);
           }
-          return File(depFile, module);
+          return Lotus.File(depFile, mod);
         };
       })(this));
     })
@@ -261,10 +256,10 @@ _unshiftContext = function(fn) {
 
 _installMissing = _unshiftContext(function(dep) {
   var info, isIgnored, ref3, ref4, ref5;
-  if (!isKind(this, Module)) {
+  if (!isKind(this, Lotus.Module)) {
     throw TypeError("'this' must be a Lotus.Module");
   }
-  if (!isKind(dep, Module)) {
+  if (!isKind(dep, Lotus.Module)) {
     throw TypeError("'dep' must be a Lotus.Module");
   }
   if (dep === this) {
@@ -282,4 +277,4 @@ _installMissing = _unshiftContext(function(dep) {
   return null;
 });
 
-//# sourceMappingURL=../../map/src/file.map
+//# sourceMappingURL=../../map/src/File.map

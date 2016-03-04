@@ -1,10 +1,11 @@
 
+Lotus = require "./index"
+
 { sync, async } = require "io"
 { assert } = require "type-utils"
 
 SortedArray = require "sorted-array"
 inArray = require "in-array"
-lotus = require "lotus-require"
 log = require "lotus-log"
 
 module.exports =
@@ -15,10 +16,10 @@ module.exports =
     modules = []
     files = []
 
-    moduleNames = Object.keys Module.cache
+    moduleNames = Object.keys Lotus.Module.cache
     async.all sync.map moduleNames, (name) ->
 
-      module = Module.cache[name]
+      module = Lotus.Module.cache[name]
       async.try ->
         module.toJSON()
 
@@ -78,6 +79,7 @@ module.exports =
 
       ignoredErrors = [
         "Module with that name already exists!"
+        "Module path must be a directory!"
       ]
 
       loadedModules = SortedArray [], (a, b) ->
@@ -88,12 +90,16 @@ module.exports =
       async.all sync.map json.modules, (module) ->
 
         async.try ->
-          Module.fromJSON module
+          Lotus.Module.fromJSON module
 
         .then (result) ->
           loadedModules.insert result
 
         .fail (error) ->
+
+          # TODO: Remove deleted module from cache.
+          # if error.message is "Module path must be a directory!"
+          #   Lotus.Module._emitter.emit "file event"
 
           return if inArray ignoredErrors, error.message
 
@@ -115,17 +121,12 @@ module.exports =
       .then ->
         async.each loadedModules.array, ({ module, dependers }) ->
           module.dependers = sync.reduce dependers, {}, (dependers, name) ->
-            dependerModule = Module.cache[name]
+            dependerModule = Lotus.Module.cache[name]
             if dependerModule?
               dependers[name] = dependerModule
             else
-              log
-                .moat 1
-                .white "Module error: "
-                .red name
-                .moat 0
-                .gray "Could not find module named '#{name}'!"
-                .moat 1
+              error = "Failed to find depender: '#{name}'!"
+              Lotus.Module._reportError { error }
             dependers
 
       .then ->
@@ -140,7 +141,7 @@ module.exports =
             async.try ->
               json = fileMap[file.path]
               assert json?, { file, reason: "File not found in 'lotus-cache.json'!" }
-              File.fromJSON file, json
+              Lotus.File.fromJSON file, json
 
             .fail (error) ->
               return if inArray ignoredErrors, error.message
@@ -174,6 +175,6 @@ module.exports =
       log
         .moat 1
         .white "Loaded cache: "
-        .yellow lotus.path + "/lotus-cache.json"
+        .yellow Lotus.path + "/lotus-cache.json"
         .gray " (in #{Date.now() - startTime} ms)"
         .moat 1

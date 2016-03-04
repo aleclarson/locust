@@ -1,15 +1,10 @@
 
-# TODO: Prevent same file from being processed more than once (if the thread was stalled by a prompt).
-#
-# TODO: Detect new directories added to $LOTUS_PATH.
-#
-# TODO: Watch modules that throw errors during initialization.
-#       Attempt to reinitialize the module if its error is detected to be fixed.
+# TODO: Fix crash when renaming a module directory.
 
-lotus = require "lotus-require"
+Lotus = require "./index"
 
 { join, relative, resolve, dirname, basename, isAbsolute } = require "path"
-{ assert, getType, setType, isKind, isType } = require "type-utils"
+{ assert, assertType, getType, setType, isKind, isType } = require "type-utils"
 { log, color, ln } = require "lotus-log"
 { EventEmitter } = require "events"
 { sync, async } = require "io"
@@ -25,12 +20,12 @@ plural = require "plural"
 noop = require "no-op"
 mm = require "micromatch"
 
-Config = require "./config"
+Config = require "./Config"
 
 module.exports =
-global.Module = NamedFunction "Module", (name) ->
+Lotus.Module = NamedFunction "Module", (name) ->
 
-  assert (not Module.cache[name]?), { name, reason: "Module with that name already exists!" }
+  assert (not Lotus.Module.cache[name]?), { name, reason: "Module with that name already exists!" }
 
   assert (name[0] isnt "/") and (name[0..1] isnt "./"), { name, reason: "Module name cannot begin with `/` or `./`!" }
 
@@ -38,8 +33,10 @@ global.Module = NamedFunction "Module", (name) ->
 
   assert (sync.isDir path), { path, reason: "Module path must be a directory!" }
 
-  Module.cache[name] =
-  mod = setType {}, Module
+  assert (not inArray GlobalConfig.json.ignoredModules, name), { name, reason: "Ignored by '$LOTUS_PATH/lotus-config' file!" }
+
+  Lotus.Module.cache[name] =
+  mod = setType {}, Lotus.Module
 
   define mod, ->
 
@@ -60,19 +57,20 @@ global.Module = NamedFunction "Module", (name) ->
       _retryWatcher: null
       _reportedMissing: {}
 
-define Module, ->
+define Lotus.Module, ->
 
   @options = configurable: no
   @
-    cache:
-      value: Object.create null
+    cache: { value: Object.create null }
+
+    pluginsEnabled: yes
 
     # Watch the files that match the given 'pattern'.
     # Only the files that have been registered via 'module.watch()' will be used.
     watch: (options, callback) ->
       options = include: options if isType options, String
       options.include ?= "**/*"
-      Module._emitter.on "file event", ({ file, event }) ->
+      Lotus.Module._emitter.on "file event", ({ file, event }) ->
         return if mm(file.path, options.include).length is 0
         return if options.exclude? and mm(file.path, options.exclude).length > 0
         callback file, event, options
@@ -80,7 +78,7 @@ define Module, ->
 
     crawl: (dir) ->
 
-      if Module.fs?
+      if Lotus.Module.fs?
         throw Error "Already crawled."
 
       promises = []
@@ -89,16 +87,23 @@ define Module, ->
         b = b.name.toLowerCase()
         if a > b then 1 else -1
 
-      fs = Module.fs = chokidar.watch dir, { depth: 0 }
+      Lotus.Module.fs =
+      fs = chokidar.watch dir, { depth: 0 }
+
+      ignoredModuleErrors = [
+        "Module with that name already exists!"
+        "Module path must be a directory!"
+        "Ignored by '$LOTUS_PATH/lotus-config' file!"
+      ]
 
       fs.on "addDir", (path) ->
 
-        return if path is lotus.path
+        return if path is Lotus.path
 
-        name = relative lotus.path, path
+        name = relative Lotus.path, path
 
-        try mod = Module name
-        catch error then return
+        try mod = Lotus.Module name
+        catch error then Lotus.Module._reportError { name, error, ignored: ignoredModuleErrors }
         return unless mod?
 
         promise = async.try ->
@@ -113,8 +118,8 @@ define Module, ->
         promises.push promise
 
       fs.on "unlinkDir", (path) ->
-        name = relative lotus.path, path
-        Module.cache[name]?._delete()
+        name = relative Lotus.path, path
+        Lotus.Module.cache[name]?._delete()
 
       deferred = async.defer()
 
@@ -126,16 +131,16 @@ define Module, ->
       deferred.promise
 
     forFile: (path) ->
-      path = relative lotus.path, path
+      path = relative Lotus.path, path
       name = path.slice 0, path.indexOf "/"
-      Module.cache[name]
+      Lotus.Module.cache[name]
 
     fromJSON: (json) ->
 
       { name, files, dependers, dependencies, config } = json
 
-      mod = Module.cache[name]
-      mod ?= Module name
+      mod = Lotus.Module.cache[name]
+      mod ?= Lotus.Module name
 
       # TODO Might not want this...
       mod._initializing = async.fulfill()
@@ -159,7 +164,19 @@ define Module, ->
 
     _plugins: {}
 
-define Module.prototype, ->
+    _reportError: (options = {}) ->
+      assertType options, Object
+      return if (isType options.ignored, Array) and (inArray options.ignored, options.error.message)
+      error = if log.isVerbose then options.error.stack else options.error.message
+      log
+        .moat 1
+        .white "Module error: "
+        .red options.name
+        .moat 0
+        .gray error
+        .moat 1
+
+define Lotus.Module.prototype, ->
   @options = frozen: yes
   @
     initialize: ->
@@ -215,44 +232,26 @@ define Module.prototype, ->
 
     toJSON: ->
 
-      if @error?
-        log
-          .moat 1
-          .red @name
-          .white " threw an error: "
-          .gray @error.message
-          .moat 1
-        return no
+      return no unless @_initializing
 
-      unless @config?
-        return no
+      @_initializing.then =>
 
-      config =
-        path: @config.path
-        json: @config.json
+        config =
+          path: @config.path
+          json: @config.json
 
-      files = Object.keys @files
+        files = Object.keys @files
 
-      if files.length is 0
-        if log.isVerbose
-          log.moat 1
-          log "'#{@name}' has no files"
-          log.moat 1
-        return no
+        if files.length > 0
+          files = sync.map files, (path) =>
+            relative @path, path
 
-      files = sync.map files, (path) => relative @path, path
+        dependers = Object.keys @dependers
 
-      dependers = Object.keys @dependers
-
-      { @name, files, dependers, @dependencies, config }
+        { @name, files, dependers, @dependencies, config }
 
   @enumerable = no
   @
-    _ignoredErrorCodes: [
-      "NOT_A_DIRECTORY"
-      "NODE_MODULES_NOT_A_DIRECTORY"
-    ]
-
     _onFileEvent: (event, path) ->
 
       if event is "add"
@@ -267,21 +266,18 @@ define Module.prototype, ->
         file.delete()
 
       process.nextTick ->
-        Module._emitter.emit "file event", { file, event }
+        Lotus.Module._emitter.emit "file event", { file, event }
 
     _retryInitialize: (error) ->
       return if @_deleted
-      silentErrors = [
-        "Could not find 'lotus-config' file!"
-      ]
-      unless inArray silentErrors, error.message
-        log
-          .moat 1
-          .white "Module error: "
-          .red @name
-          .moat 0
-          .gray (if log.isVerbose then error.stack else error.message)
-          .moat 1
+      Lotus.Module._reportError {
+        @name
+        error
+        ignored: [
+          "The given path is not a directory!"
+          "Could not find 'lotus-config' file!"
+        ]
+      }
       unless @_retryWatcher?
         @_retryWatcher = chokidar.watch @path, { depth: 1 }
         @_retryWatcher.once "ready", =>
@@ -289,6 +285,7 @@ define Module.prototype, ->
             async.try =>
               @initialize()
             .then =>
+              return unless @_retryWatcher?
               @_retryWatcher.close()
               @_retryWatcher = null
             .fail (error) =>
@@ -300,8 +297,13 @@ define Module.prototype, ->
       return if @_deleted
       @_deleted = yes
 
-      @_retryWatcher.close()
-      @_retryWatcher = null
+      log.it "Deleted module: " + @name
+
+      delete Lotus.Module.cache[@name]
+
+      if @_retryWatcher?
+        @_retryWatcher.close()
+        @_retryWatcher = null
 
       sync.each @dependers, (mod) =>
         delete mod.dependencies[@name]
@@ -312,23 +314,17 @@ define Module.prototype, ->
       sync.each @files, (file) ->
         file.delete()
 
-      delete Module.cache[@name]
-
     _loadPlugins: ->
 
-      @config.addPlugins Module._plugins
+      return unless Lotus.Module.pluginsEnabled
+
+      @config.addPlugins Lotus.Module._plugins
 
       @config.loadPlugins (plugin, options) =>
         plugin this, options
 
       .fail (error) =>
-        log
-          .moat 1
-          .white "Module error: "
-          .red @name
-          .moat 0
-          .gray (if log.isVerbose then error.stack else error.message)
-          .moat 1
+        Lotus.Module._reportError { @name, error }
 
     # TODO: Watch dependencies for changes.
     _loadDependencies: ->
@@ -359,9 +355,9 @@ define Module.prototype, ->
           # Ignore development dependencies.
           return if moduleJson.devDependencies?[name]?
 
-          dep = Module.cache[name]
+          dep = Lotus.Module.cache[name]
 
-          try dep ?= Module name
+          try dep ?= Lotus.Module name
 
           return unless dep?
 
@@ -393,13 +389,6 @@ define Module.prototype, ->
             @dependencies[dep.name] =
               version: json.version
               lastModified: stats.node.mtime
-
-            if log.isDebug
-              log.origin "lotus/module"
-              log.yellow @name
-              log " depends on "
-              log.yellow dep.name
-              log.moat 1
 
           # Handle errors for this dependency.
           .fail (error) ->

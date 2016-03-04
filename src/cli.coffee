@@ -5,8 +5,8 @@ lotus = require "lotus-require"
 { isType, assert } = require "type-utils"
 { log, ln, color } = require "lotus-log"
 
-require "./file"
-require "./module"
+global.File = require "./File"
+global.Module = require "./Module"
 
 #
 # Key bindings
@@ -71,24 +71,24 @@ return help() if command is "--help"
 # Plugin startup
 #
 
-Config = require "./config"
+Config = require "./Config"
 
-config = Config lotus.path
+global.GlobalConfig = Config lotus.path
 
 log.origin "lotus"
 log.yellow "plugins:"
 log.moat 0
 log.plusIndent 2
-log Object.keys(config.plugins).join log.ln
+log Object.keys(GlobalConfig.plugins).join log.ln
 log.popIndent()
 log.moat 1
 
-config.loadPlugins (plugin, options) ->
+GlobalConfig.loadPlugins (plugin, options) ->
   plugin commands, options
 
 .then ->
 
-  command = commands[command]
+  command = commands[key = command]
 
   if command?
 
@@ -101,10 +101,10 @@ config.loadPlugins (plugin, options) ->
       require command
 
     else
-      throw Error "'#{color.red command}' must be defined as a Function or String"
+      throw Error "'#{color.red key}' must be defined as a Function or String"
 
   else
     help()
-    throw Error "'#{color.red command}' is an invalid command"
+    throw Error "'#{color.red key}' is an invalid command"
 
 .done()

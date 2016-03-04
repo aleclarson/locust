@@ -1,10 +1,10 @@
-var Config, EventEmitter, NamedFunction, SemVer, SortedArray, assert, async, basename, chokidar, color, combine, define, dirname, getType, inArray, isAbsolute, isKind, isType, join, ln, log, lotus, mm, noop, plural, ref, ref1, ref2, ref3, relative, resolve, setType, sync;
+var Config, EventEmitter, Lotus, NamedFunction, SemVer, SortedArray, assert, assertType, async, basename, chokidar, color, combine, define, dirname, getType, inArray, isAbsolute, isKind, isType, join, ln, log, mm, noop, plural, ref, ref1, ref2, ref3, relative, resolve, setType, sync;
 
-lotus = require("lotus-require");
+Lotus = require("./index");
 
 ref = require("path"), join = ref.join, relative = ref.relative, resolve = ref.resolve, dirname = ref.dirname, basename = ref.basename, isAbsolute = ref.isAbsolute;
 
-ref1 = require("type-utils"), assert = ref1.assert, getType = ref1.getType, setType = ref1.setType, isKind = ref1.isKind, isType = ref1.isType;
+ref1 = require("type-utils"), assert = ref1.assert, assertType = ref1.assertType, getType = ref1.getType, setType = ref1.setType, isKind = ref1.isKind, isType = ref1.isType;
 
 ref2 = require("lotus-log"), log = ref2.log, color = ref2.color, ln = ref2.ln;
 
@@ -32,11 +32,11 @@ noop = require("no-op");
 
 mm = require("micromatch");
 
-Config = require("./config");
+Config = require("./Config");
 
-module.exports = global.Module = NamedFunction("Module", function(name) {
+module.exports = Lotus.Module = NamedFunction("Module", function(name) {
   var mod, path;
-  assert(Module.cache[name] == null, {
+  assert(Lotus.Module.cache[name] == null, {
     name: name,
     reason: "Module with that name already exists!"
   });
@@ -49,7 +49,11 @@ module.exports = global.Module = NamedFunction("Module", function(name) {
     path: path,
     reason: "Module path must be a directory!"
   });
-  Module.cache[name] = mod = setType({}, Module);
+  assert(!inArray(GlobalConfig.json.ignoredModules, name), {
+    name: name,
+    reason: "Ignored by '$LOTUS_PATH/lotus-config' file!"
+  });
+  Lotus.Module.cache[name] = mod = setType({}, Lotus.Module);
   return define(mod, function() {
     this.options = {
       configurable: false
@@ -64,6 +68,7 @@ module.exports = global.Module = NamedFunction("Module", function(name) {
     });
     this.enumerable = false;
     return this({
+      _deleted: false,
       _patterns: Object.create(null),
       _initializing: null,
       _retryWatcher: null,
@@ -72,7 +77,7 @@ module.exports = global.Module = NamedFunction("Module", function(name) {
   });
 });
 
-define(Module, function() {
+define(Lotus.Module, function() {
   var emitter;
   this.options = {
     configurable: false
@@ -81,6 +86,7 @@ define(Module, function() {
     cache: {
       value: Object.create(null)
     },
+    pluginsEnabled: true,
     watch: function(options, callback) {
       if (isType(options, String)) {
         options = {
@@ -90,7 +96,7 @@ define(Module, function() {
       if (options.include == null) {
         options.include = "**/*";
       }
-      Module._emitter.on("file event", function(arg) {
+      Lotus.Module._emitter.on("file event", function(arg) {
         var event, file;
         file = arg.file, event = arg.event;
         if (mm(file.path, options.include).length === 0) {
@@ -103,8 +109,8 @@ define(Module, function() {
       });
     },
     crawl: function(dir) {
-      var deferred, fs, newModules, promises;
-      if (Module.fs != null) {
+      var deferred, fs, ignoredModuleErrors, newModules, promises;
+      if (Lotus.Module.fs != null) {
         throw Error("Already crawled.");
       }
       promises = [];
@@ -117,20 +123,25 @@ define(Module, function() {
           return -1;
         }
       });
-      fs = Module.fs = chokidar.watch(dir, {
+      Lotus.Module.fs = fs = chokidar.watch(dir, {
         depth: 0
       });
+      ignoredModuleErrors = ["Module with that name already exists!", "Module path must be a directory!", "Ignored by '$LOTUS_PATH/lotus-config' file!"];
       fs.on("addDir", function(path) {
         var error, mod, name, promise;
-        if (path === lotus.path) {
+        if (path === Lotus.path) {
           return;
         }
-        name = relative(lotus.path, path);
+        name = relative(Lotus.path, path);
         try {
-          mod = Module(name);
+          mod = Lotus.Module(name);
         } catch (_error) {
           error = _error;
-          return;
+          Lotus.Module._reportError({
+            name: name,
+            error: error,
+            ignored: ignoredModuleErrors
+          });
         }
         if (mod == null) {
           return;
@@ -146,8 +157,8 @@ define(Module, function() {
       });
       fs.on("unlinkDir", function(path) {
         var name, ref4;
-        name = relative(lotus.path, path);
-        return (ref4 = Module.cache[name]) != null ? ref4._delete() : void 0;
+        name = relative(Lotus.path, path);
+        return (ref4 = Lotus.Module.cache[name]) != null ? ref4._delete() : void 0;
       });
       deferred = async.defer();
       fs.once("ready", function() {
@@ -159,16 +170,16 @@ define(Module, function() {
     },
     forFile: function(path) {
       var name;
-      path = relative(lotus.path, path);
+      path = relative(Lotus.path, path);
       name = path.slice(0, path.indexOf("/"));
-      return Module.cache[name];
+      return Lotus.Module.cache[name];
     },
     fromJSON: function(json) {
       var config, dependencies, dependers, files, mod, name;
       name = json.name, files = json.files, dependers = json.dependers, dependencies = json.dependencies, config = json.config;
-      mod = Module.cache[name];
+      mod = Lotus.Module.cache[name];
       if (mod == null) {
-        mod = Module(name);
+        mod = Lotus.Module(name);
       }
       mod._initializing = async.fulfill();
       mod.config = Config.fromJSON(config.path, config.json);
@@ -189,11 +200,23 @@ define(Module, function() {
   this.enumerable = false;
   return this({
     _emitter: emitter,
-    _plugins: {}
+    _plugins: {},
+    _reportError: function(options) {
+      var error;
+      if (options == null) {
+        options = {};
+      }
+      assertType(options, Object);
+      if ((isType(options.ignored, Array)) && (inArray(options.ignored, options.error.message))) {
+        return;
+      }
+      error = log.isVerbose ? options.error.stack : options.error.message;
+      return log.moat(1).white("Module error: ").red(options.name).moat(0).gray(error).moat(1);
+    }
   });
 });
 
-define(Module.prototype, function() {
+define(Lotus.Module.prototype, function() {
   this.options = {
     frozen: true
   };
@@ -245,45 +268,36 @@ define(Module.prototype, function() {
       return fs.adding = deferred.promise;
     },
     toJSON: function() {
-      var config, dependers, files;
-      if (this.error != null) {
-        log.moat(1).red(this.name).white(" threw an error: ").gray(this.error.message).moat(1);
+      if (!this._initializing) {
         return false;
       }
-      if (this.config == null) {
-        return false;
-      }
-      config = {
-        path: this.config.path,
-        json: this.config.json
-      };
-      files = Object.keys(this.files);
-      if (files.length === 0) {
-        if (log.isVerbose) {
-          log.moat(1);
-          log("'" + this.name + "' has no files");
-          log.moat(1);
-        }
-        return false;
-      }
-      files = sync.map(files, (function(_this) {
-        return function(path) {
-          return relative(_this.path, path);
+      return this._initializing.then((function(_this) {
+        return function() {
+          var config, dependers, files;
+          config = {
+            path: _this.config.path,
+            json: _this.config.json
+          };
+          files = Object.keys(_this.files);
+          if (files.length > 0) {
+            files = sync.map(files, function(path) {
+              return relative(_this.path, path);
+            });
+          }
+          dependers = Object.keys(_this.dependers);
+          return {
+            name: _this.name,
+            files: files,
+            dependers: dependers,
+            dependencies: _this.dependencies,
+            config: config
+          };
         };
       })(this));
-      dependers = Object.keys(this.dependers);
-      return {
-        name: this.name,
-        files: files,
-        dependers: dependers,
-        dependencies: this.dependencies,
-        config: config
-      };
     }
   });
   this.enumerable = false;
   return this({
-    _ignoredErrorCodes: ["NOT_A_DIRECTORY", "NODE_MODULES_NOT_A_DIRECTORY"],
     _onFileEvent: function(event, path) {
       var file;
       if (event === "add") {
@@ -300,21 +314,21 @@ define(Module.prototype, function() {
         file["delete"]();
       }
       return process.nextTick(function() {
-        return Module._emitter.emit("file event", {
+        return Lotus.Module._emitter.emit("file event", {
           file: file,
           event: event
         });
       });
     },
     _retryInitialize: function(error) {
-      var silentErrors;
       if (this._deleted) {
         return;
       }
-      silentErrors = ["Could not find 'lotus-config' file!"];
-      if (!inArray(silentErrors, error.message)) {
-        log.moat(1).white("Module error: ").red(this.name).moat(0).gray((log.isVerbose ? error.stack : error.message)).moat(1);
-      }
+      Lotus.Module._reportError({
+        name: this.name,
+        error: error,
+        ignored: ["The given path is not a directory!", "Could not find 'lotus-config' file!"]
+      });
       if (this._retryWatcher == null) {
         this._retryWatcher = chokidar.watch(this.path, {
           depth: 1
@@ -325,6 +339,9 @@ define(Module.prototype, function() {
               return async["try"](function() {
                 return _this.initialize();
               }).then(function() {
+                if (_this._retryWatcher == null) {
+                  return;
+                }
                 _this._retryWatcher.close();
                 return _this._retryWatcher = null;
               }).fail(function(error) {
@@ -340,8 +357,12 @@ define(Module.prototype, function() {
         return;
       }
       this._deleted = true;
-      this._retryWatcher.close();
-      this._retryWatcher = null;
+      log.it("Deleted module: " + this.name);
+      delete Lotus.Module.cache[this.name];
+      if (this._retryWatcher != null) {
+        this._retryWatcher.close();
+        this._retryWatcher = null;
+      }
       sync.each(this.dependers, (function(_this) {
         return function(mod) {
           return delete mod.dependencies[_this.name];
@@ -352,20 +373,25 @@ define(Module.prototype, function() {
           return delete mod.dependers[_this.name];
         };
       })(this));
-      sync.each(this.files, function(file) {
+      return sync.each(this.files, function(file) {
         return file["delete"]();
       });
-      return delete Module.cache[this.name];
     },
     _loadPlugins: function() {
-      this.config.addPlugins(Module._plugins);
+      if (!Lotus.Module.pluginsEnabled) {
+        return;
+      }
+      this.config.addPlugins(Lotus.Module._plugins);
       return this.config.loadPlugins((function(_this) {
         return function(plugin, options) {
           return plugin(_this, options);
         };
       })(this)).fail((function(_this) {
         return function(error) {
-          return log.moat(1).white("Module error: ").red(_this.name).moat(0).gray((log.isVerbose ? error.stack : error.message)).moat(1);
+          return Lotus.Module._reportError({
+            name: _this.name,
+            error: error
+          });
         };
       })(this));
     },
@@ -405,10 +431,10 @@ define(Module.prototype, function() {
             if (((ref4 = moduleJson.devDependencies) != null ? ref4[name] : void 0) != null) {
               return;
             }
-            dep = Module.cache[name];
+            dep = Lotus.Module.cache[name];
             try {
               if (dep == null) {
-                dep = Module(name);
+                dep = Lotus.Module(name);
               }
             } catch (_error) {}
             if (dep == null) {
@@ -441,17 +467,10 @@ define(Module.prototype, function() {
               stats = arg.stats, json = arg.json;
               depCount++;
               dep.dependers[_this.name] = _this;
-              _this.dependencies[dep.name] = {
+              return _this.dependencies[dep.name] = {
                 version: json.version,
                 lastModified: stats.node.mtime
               };
-              if (log.isDebug) {
-                log.origin("lotus/module");
-                log.yellow(_this.name);
-                log(" depends on ");
-                log.yellow(dep.name);
-                return log.moat(1);
-              }
             }).fail(function(error) {
               return log.moat(1).white("Dependency error: ").red(name).moat(0).gray(error.stack).moat(1);
             });
@@ -492,4 +511,4 @@ define(Module.prototype, function() {
   });
 });
 
-//# sourceMappingURL=../../map/src/module.map
+//# sourceMappingURL=../../map/src/Module.map

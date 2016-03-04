@@ -1,8 +1,6 @@
 
 lotus = require "lotus-require"
 
-lotus ?= {}
-
 lotus.log = require "lotus-log"
 
 module.exports = lotus

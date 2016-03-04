@@ -17,7 +17,7 @@ Config = NamedFunction "LotusConfig", (dir = ".") ->
 
   return new Config dir unless isKind this, Config
 
-  assert sync.isDir(dir), { dir, reason: "'#{dir}' is not a directory!" }
+  assert sync.isDir(dir), { dir, reason: "The given path is not a directory!" }
 
   regex = /^lotus-config(\.[^\.]+)?$/
   paths = sync.readDir dir
@@ -49,11 +49,13 @@ define Config,
       plugins = KeyMirror plugins
 
     define this, ->
+
+      @ "plugins", { value: plugins }
+
       @frozen = yes
       @
         path: path
         json: { value: json }
-        plugins: { value: plugins }
         implicitDependencies: { value: implicitDependencies }
 
 define Config.prototype,

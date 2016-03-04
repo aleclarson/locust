@@ -1,5 +1,5 @@
 
-lotus = require "lotus-require"
+Lotus = require "./index"
 
 { join, isAbsolute, dirname, basename, extname, relative } = require "path"
 { assert, isKind, setType } = require "type-utils"
@@ -15,22 +15,22 @@ plural = require "plural"
 log = require "lotus-log"
 
 module.exports =
-global.File = NamedFunction "File", (path, module) ->
+Lotus.File = NamedFunction "File", (path, mod) ->
 
-  module ?= Module.forFile path
+  mod ?= Lotus.Module.forFile path
 
-  assert module?, { path, reason: "This file belongs to an unknown module!" }
+  assert mod?, { path, reason: "This file belongs to an unknown module!" }
 
-  file = module.files[path]
+  file = mod.files[path]
   return file if file?
 
-  module.files[path] =
+  mod.files[path] =
   file = setType {}, File
 
   assert (isAbsolute path), { path, reason: "The file path must be absolute!" }
 
   name = basename path, extname path
-  dir = relative module.path, dirname path
+  dir = relative mod.path, dirname path
 
   # log
   #   .moat 1
@@ -52,7 +52,7 @@ global.File = NamedFunction "File", (path, module) ->
       name
       dir
       path
-      module
+      module: mod
     }
 
     @options = enumerable: no
@@ -60,7 +60,7 @@ global.File = NamedFunction "File", (path, module) ->
       _initializing: null
       _reading: null
 
-define File,
+define Lotus.File,
 
   # Used to initialize a File with its JSON representation.
   fromJSON: (file, json) ->
@@ -70,7 +70,7 @@ define File,
       file.lastModified = json.lastModified
 
     async.reduce json.dependers, {}, (dependers, path) ->
-      dependers[path] = File path
+      dependers[path] = Lotus.File path
       dependers
 
     .then (dependers) ->
@@ -78,14 +78,14 @@ define File,
 
     .then ->
       async.reduce json.dependencies, {}, (dependencies, path) ->
-        dependencies[path] = File path
+        dependencies[path] = Lotus.File path
         dependencies
 
     .then (dependencies) ->
       file.dependencies = dependencies
       file
 
-define File.prototype, ->
+define Lotus.File.prototype, ->
   @options =
     configurable: no
     writable: no
@@ -159,33 +159,21 @@ define File.prototype, ->
 
           promise
 
-      .then =>
-        if log.isDebug and log.isVerbose
-          log.origin "lotus/file"
-          log.yellow relative lotus.path, @path
-          log " has "
-          log.yellow depCount
-          log " ", plural "dependency", depCount
-          log.moat 1
-
     _loadDep: async.promised (depPath) ->
 
       return if NODE_PATHS.indexOf(depPath) >= 0
 
-      depFile = lotus.resolve depPath, @path
+      depFile = Lotus.resolve depPath, @path
 
       return if depFile is null
 
       if depPath[0] isnt "." and depPath.indexOf("/") < 0
 
-        module = Module.cache[depPath]
+        mod = Lotus.Module.cache[depPath]
 
-        unless module?
+        unless mod?
 
-          try
-            module = Module depPath
-            module.initialize()
-
+          try mod = Lotus.Module depPath
           catch error
             # log
             #   .moat 1
@@ -194,9 +182,15 @@ define File.prototype, ->
             #   .moat 0
             #   .gray (if log.isVerbose then error.stack else error.message)
             #   .moat 1
-            return
+          return unless mod?
 
-        File depFile, module
+          async.try ->
+            mod.initialize()
+
+          .fail (error) ->
+            mod._retryInitialize error
+
+        Lotus.File depFile, mod
 
       depDir = depFile
 
@@ -219,10 +213,10 @@ define File.prototype, ->
 
           done basename depDir
 
-      .then (moduleName) =>
-        module = Module.cache[moduleName]
-        module ?= Module moduleName
-        File depFile, module
+      .then (modName) =>
+        mod = Lotus.Module.cache[modName]
+        mod ?= Lotus.Module modName
+        Lotus.File depFile, mod
 
 ##
 ## HELPERS
@@ -237,10 +231,10 @@ _unshiftContext = (fn) -> (context, args...) ->
 
 _installMissing = _unshiftContext (dep) ->
 
-  if !isKind this, Module
+  if !isKind this, Lotus.Module
     throw TypeError "'this' must be a Lotus.Module"
 
-  if !isKind dep, Module
+  if !isKind dep, Lotus.Module
     throw TypeError "'dep' must be a Lotus.Module"
 
   if dep is this
