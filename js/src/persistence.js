@@ -1,6 +1,4 @@
-var Lotus, SortedArray, assert, async, inArray, log, ref, sync;
-
-Lotus = require("./index");
+var SortedArray, assert, async, inArray, log, ref, sync;
 
 ref = require("io"), sync = ref.sync, async = ref.async;
 
@@ -18,10 +16,10 @@ module.exports = {
     startTime = Date.now();
     modules = [];
     files = [];
-    moduleNames = Object.keys(Lotus.Module.cache);
+    moduleNames = Object.keys(Module.cache);
     return async.all(sync.map(moduleNames, function(name) {
       var module;
-      module = Lotus.Module.cache[name];
+      module = Module.cache[name];
       return async["try"](function() {
         return module.toJSON();
       }).then(function(json) {
@@ -73,21 +71,14 @@ module.exports = {
       });
       return async.all(sync.map(json.modules, function(module) {
         return async["try"](function() {
-          return Lotus.Module.fromJSON(module);
+          return Module.fromJSON(module);
         }).then(function(result) {
           return loadedModules.insert(result);
         }).fail(function(error) {
           if (inArray(ignoredErrors, error.message)) {
             return;
           }
-          log.moat(1).white("Module failed to load: ").red(module.name).moat(1).gray(error.stack).moat(1);
-          try {
-            require("lotus-repl");
-            return log.repl.sync();
-          } catch (_error) {
-            error = _error;
-            return log.it("REPL failed: " + error.message);
-          }
+          return log.moat(1).white("Module failed to load: ").red(module.name).moat(1).gray(error.stack).moat(1);
         });
       })).then(function() {
         return async.each(loadedModules.array, function(arg) {
@@ -95,12 +86,12 @@ module.exports = {
           module = arg.module, dependers = arg.dependers;
           return module.dependers = sync.reduce(dependers, {}, function(dependers, name) {
             var dependerModule, error;
-            dependerModule = Lotus.Module.cache[name];
+            dependerModule = Module.cache[name];
             if (dependerModule != null) {
               dependers[name] = dependerModule;
             } else {
               error = "Failed to find depender: '" + name + "'!";
-              Lotus.Module._reportError({
+              Module._reportError({
                 error: error
               });
             }
@@ -119,7 +110,7 @@ module.exports = {
                 file: file,
                 reason: "File not found in 'lotus-cache.json'!"
               });
-              return Lotus.File.fromJSON(file, json);
+              return File.fromJSON(file, json);
             }).fail(function(error) {
               if (inArray(ignoredErrors, error.message)) {
                 return;
@@ -153,7 +144,7 @@ module.exports = {
         log.moat(1);
       }
       log.popIndent();
-      return log.moat(1).white("Loaded cache: ").yellow(Lotus.path + "/lotus-cache.json").gray(" (in " + (Date.now() - startTime) + " ms)").moat(1);
+      return log.moat(1).white("Loaded cache: ").yellow(lotus.path + "/lotus-cache.json").gray(" (in " + (Date.now() - startTime) + " ms)").moat(1);
     });
   }
 };

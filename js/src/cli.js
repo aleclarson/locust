@@ -1,16 +1,6 @@
-var Config, arg, assert, async, color, command, commands, help, i, isType, len, ln, log, lotus, ref, ref1, ref2;
+var Config, argv, command, commands;
 
-lotus = require("lotus-require");
-
-async = require("io").async;
-
-ref = require("type-utils"), isType = ref.isType, assert = ref.assert;
-
-ref1 = require("lotus-log"), log = ref1.log, ln = ref1.ln, color = ref1.color;
-
-global.File = require("./File");
-
-global.Module = require("./Module");
+require("./global");
 
 log.clear();
 
@@ -19,69 +9,64 @@ log.indent = 2;
 log.moat(1);
 
 commands = {
-  watch: require("./watch")
+  watch: __dirname + "/watch"
 };
 
-command = "watch";
+argv = process.argv.slice(2);
 
-ref2 = process.argv.slice(2);
-for (i = 0, len = ref2.length; i < len; i++) {
-  arg = ref2[i];
-  if (arg[0] !== "-") {
-    command = arg;
-    break;
-  }
-}
-
-help = function() {
-  log.moat(1);
-  log.indent = 2;
-  log.green.bold("Commands");
-  log.indent = 4;
-  log(ln, Object.keys(commands).join(ln));
-  return log.moat(1);
-};
-
-if (command === "--help") {
-  return help();
-}
+command = argv[0] != null ? argv[0] : argv[0] = "watch";
 
 Config = require("./Config");
 
 global.GlobalConfig = Config(lotus.path);
 
-log.origin("lotus");
+log.moat(1);
 
-log.yellow("plugins:");
+log.green.bold("Global plugins:");
 
 log.moat(0);
 
 log.plusIndent(2);
 
-log(Object.keys(GlobalConfig.plugins).join(log.ln));
+log.white(Object.keys(GlobalConfig.plugins).join(log.ln));
 
 log.popIndent();
 
 log.moat(1);
 
+process.cli = true;
+
 GlobalConfig.loadPlugins(function(plugin, options) {
-  return plugin(commands, options);
+  process.options = options;
+  plugin(commands);
+  return process.options = void 0;
 }).then(function() {
-  var key;
-  command = commands[key = command];
-  if (command != null) {
-    process.chdir(lotus.path);
-    if (isType(command, Function)) {
-      return command.call();
-    } else if (isType(command, String)) {
-      return require(command);
-    } else {
-      throw Error("'" + (color.red(key)) + "' must be defined as a Function or String");
-    }
-  } else {
+  var help, modulePath;
+  process.cli = false;
+  help = function() {
+    log.moat(1);
+    log.green.bold("Available commands:");
+    log.plusIndent(2);
+    log.moat(0);
+    log.white(Object.keys(commands).join(log.ln));
+    log.popIndent();
+    return log.moat(1);
+  };
+  if (command === "--help") {
     help();
-    throw Error("'" + (color.red(key)) + "' is an invalid command");
+    process.exit();
   }
+  modulePath = commands[command];
+  assertType(modulePath, [String, Void]);
+  if (modulePath == null) {
+    help();
+    log.moat(1);
+    log.red("Invalid command: ");
+    log.white(command);
+    log.moat(1);
+    process.exit();
+  }
+  return require(modulePath);
 }).done();
 
 //# sourceMappingURL=../../map/src/cli.map

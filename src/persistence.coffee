@@ -1,6 +1,4 @@
 
-Lotus = require "./index"
-
 { sync, async } = require "io"
 { assert } = require "type-utils"
 
@@ -16,10 +14,10 @@ module.exports =
     modules = []
     files = []
 
-    moduleNames = Object.keys Lotus.Module.cache
+    moduleNames = Object.keys Module.cache
     async.all sync.map moduleNames, (name) ->
 
-      module = Lotus.Module.cache[name]
+      module = Module.cache[name]
       async.try ->
         module.toJSON()
 
@@ -90,7 +88,7 @@ module.exports =
       async.all sync.map json.modules, (module) ->
 
         async.try ->
-          Lotus.Module.fromJSON module
+          Module.fromJSON module
 
         .then (result) ->
           loadedModules.insert result
@@ -99,7 +97,7 @@ module.exports =
 
           # TODO: Remove deleted module from cache.
           # if error.message is "Module path must be a directory!"
-          #   Lotus.Module._emitter.emit "file event"
+          #   Module._emitter.emit "file event"
 
           return if inArray ignoredErrors, error.message
 
@@ -111,22 +109,15 @@ module.exports =
             .gray error.stack
             .moat 1
 
-          try
-            require "lotus-repl"
-            log.repl.sync()
-
-          catch error
-            log.it "REPL failed: " + error.message
-
       .then ->
         async.each loadedModules.array, ({ module, dependers }) ->
           module.dependers = sync.reduce dependers, {}, (dependers, name) ->
-            dependerModule = Lotus.Module.cache[name]
+            dependerModule = Module.cache[name]
             if dependerModule?
               dependers[name] = dependerModule
             else
               error = "Failed to find depender: '#{name}'!"
-              Lotus.Module._reportError { error }
+              Module._reportError { error }
             dependers
 
       .then ->
@@ -141,7 +132,7 @@ module.exports =
             async.try ->
               json = fileMap[file.path]
               assert json?, { file, reason: "File not found in 'lotus-cache.json'!" }
-              Lotus.File.fromJSON file, json
+              File.fromJSON file, json
 
             .fail (error) ->
               return if inArray ignoredErrors, error.message
@@ -175,6 +166,6 @@ module.exports =
       log
         .moat 1
         .white "Loaded cache: "
-        .yellow Lotus.path + "/lotus-cache.json"
+        .yellow lotus.path + "/lotus-cache.json"
         .gray " (in #{Date.now() - startTime} ms)"
         .moat 1

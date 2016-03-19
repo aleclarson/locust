@@ -1,71 +1,16 @@
 
-lotus = require "lotus-require"
-
-{ async } = require "io"
-{ isType, assert } = require "type-utils"
-{ log, ln, color } = require "lotus-log"
-
-global.File = require "./File"
-global.Module = require "./Module"
-
-#
-# Key bindings
-#
-
-# KeyBindings = require "key-bindings"
-# keys = KeyBindings
-#
-#   "c+ctrl": ->
-#     log.moat 1
-#     log.red "CTRL+C"
-#     log.moat 1
-#     process.exit 0
-#
-# keys.stream = process.stdin
-
-
-#
-# Logging configuration
-#
+require "./global"
 
 log.clear()
 log.indent = 2
-# log.cursor.isHidden = yes
-
-# require "lotus-repl"
-# log.repl.transform = "coffee"
-
 log.moat 1
 
-#
-# Parse the terminal input for a command
-#
+commands = {
+  watch: __dirname + "/watch"
+}
 
-commands =
-  watch: require "./watch"
-
-# Default to the 'watch' command.
-command = "watch"
-
-for arg in process.argv.slice 2
-  if arg[0] isnt "-"
-    command = arg
-    break
-
-#
-# `--help` prints a list of valid commands
-#
-
-help = ->
-  log.moat 1
-  log.indent = 2
-  log.green.bold "Commands"
-  log.indent = 4
-  log ln, Object.keys(commands).join ln
-  log.moat 1
-
-return help() if command is "--help"
-
+argv = process.argv.slice 2
+command = argv[0] ?= "watch"
 
 #
 # Plugin startup
@@ -75,36 +20,49 @@ Config = require "./Config"
 
 global.GlobalConfig = Config lotus.path
 
-log.origin "lotus"
-log.yellow "plugins:"
+log.moat 1
+log.green.bold "Global plugins:"
 log.moat 0
 log.plusIndent 2
-log Object.keys(GlobalConfig.plugins).join log.ln
+log.white Object.keys(GlobalConfig.plugins).join log.ln
 log.popIndent()
 log.moat 1
 
+process.cli = yes
+
+# Allow global plugins to extend available commands.
 GlobalConfig.loadPlugins (plugin, options) ->
-  plugin commands, options
+  process.options = options
+  plugin commands
+  process.options = undefined
 
 .then ->
+  process.cli = no
 
-  command = commands[key = command]
+  help = ->
+    log.moat 1
+    log.green.bold "Available commands:"
+    log.plusIndent 2
+    log.moat 0
+    log.white Object.keys(commands).join log.ln
+    log.popIndent()
+    log.moat 1
 
-  if command?
-
-    process.chdir lotus.path
-
-    if isType command, Function
-      command.call()
-
-    else if isType command, String
-      require command
-
-    else
-      throw Error "'#{color.red key}' must be defined as a Function or String"
-
-  else
+  if command is "--help"
     help()
-    throw Error "'#{color.red key}' is an invalid command"
+    process.exit()
+
+  modulePath = commands[command]
+  assertType modulePath, [ String, Void ]
+
+  unless modulePath?
+    help()
+    log.moat 1
+    log.red "Invalid command: "
+    log.white command
+    log.moat 1
+    process.exit()
+
+  require modulePath
 
 .done()

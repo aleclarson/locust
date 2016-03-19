@@ -29,7 +29,7 @@ Lotus.Module = NamedFunction "Module", (name) ->
 
   assert (name[0] isnt "/") and (name[0..1] isnt "./"), { name, reason: "Module name cannot begin with `/` or `./`!" }
 
-  path = resolve name
+  path = resolve Lotus.path, name
 
   assert (sync.isDir path), { path, reason: "Module path must be a directory!" }
 

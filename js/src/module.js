@@ -44,7 +44,7 @@ module.exports = Lotus.Module = NamedFunction("Module", function(name) {
     name: name,
     reason: "Module name cannot begin with `/` or `./`!"
   });
-  path = resolve(name);
+  path = resolve(Lotus.path, name);
   assert(sync.isDir(path), {
     path: path,
     reason: "Module path must be a directory!"
