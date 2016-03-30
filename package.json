@@ -6,6 +6,7 @@
     "lotus": "./bin/lotus"
   },
   "dependencies": {
+    "async": "aleclarson/async#1.0.0",
     "chokidar": "aleclarson/chokidar",
     "coffee-script": "aleclarson/coffee-script#1.9.3",
     "combine": "aleclarson/combine#1.0.0",

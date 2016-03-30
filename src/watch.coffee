@@ -5,49 +5,41 @@
 # TODO: A command that lists the dependencies or dependers of each module.
 # TODO: Notify when dependencies exist that aren't being used.
 
+syncFs = require "io/sync"
 semver = require "semver"
 Path = require "path"
 exit = require "exit"
 
-{ toJSON, fromJSON } = require "./persistence"
+Cache = require "./Cache"
 
-isDirty = no
-Module._emitter.on "file event", -> isDirty = yes
-exit.on -> toJSON().done() if isDirty
+Cache.load().then ->
 
-isCached = sync.isFile "lotus-cache.json"
+  log.moat 1
+  log.white "Crawling: "
+  log.yellow lotus.path
+  log.moat 1
 
-promise = if isCached then fromJSON() else async.resolve()
-
-promise.then ->
-
-  log
-    .moat 1
-    .white "Crawling: "
-    .yellow lotus.path
-    .moat 1
-
-  Module.crawl lotus.path
+  lotus.Module.crawl lotus.path
 
 .then (newModules) ->
 
+  log.moat 1
   if newModules.length > 0
-
-    log
-      .moat 1
-      .white "Found #{newModules.length} modules: "
-      .moat 1
+    isDirty = yes
+    log.white "Found #{log.color.green newModules.length} new modules: "
+    log.moat 1
     log.plusIndent 2
-    for module in newModules
-      log.green module.name
-      log.moat 1
+    for module, index in newModules
+      color = if index % 2 then "cyan" else "green"
+      newPart = module.name + " "
+      newLength = log.line.length + newPart.length
+      log.moat 0 if newLength > log.size[0] - log.indent
+      log[color] newPart
     log.popIndent()
+  else
+    log.white "Found #{log.color.green.dim 0} new modules!"
 
-    toJSON().done()
-
-  log
-    .moat 1
-    .cyan "Listening for file changes..."
-    .moat 1
-
-.done()
+  Cache.save().then ->
+    log.moat 1
+    log.cyan "Listening for file changes..."
+    log.moat 1

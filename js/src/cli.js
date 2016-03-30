@@ -1,72 +1,89 @@
-var Config, argv, command, commands;
+var Config, command, minimist, printCommandList;
 
 require("./global");
 
-log.clear();
+lotus.File = require("./File");
 
-log.indent = 2;
+lotus.Module = require("./Module");
 
-log.moat(1);
+lotus.Plugin = require("./Plugin");
 
-commands = {
-  watch: __dirname + "/watch"
+minimist = require("minimist");
+
+process.cli = true;
+
+process.options = minimist(process.argv.slice(2));
+
+command = process.options._[0] || "watch";
+
+lotus.Plugin.commands.watch = function() {
+  return require("./watch");
 };
-
-argv = process.argv.slice(2);
-
-command = argv[0] != null ? argv[0] : argv[0] = "watch";
 
 Config = require("./Config");
 
 global.GlobalConfig = Config(lotus.path);
 
-log.moat(1);
-
-log.green.bold("Global plugins:");
-
-log.moat(0);
-
-log.plusIndent(2);
-
-log.white(Object.keys(GlobalConfig.plugins).join(log.ln));
-
-log.popIndent();
-
-log.moat(1);
-
-process.cli = true;
-
-GlobalConfig.loadPlugins(function(plugin, options) {
-  process.options = options;
-  plugin(commands);
-  return process.options = void 0;
-}).then(function() {
-  var help, modulePath;
-  process.cli = false;
-  help = function() {
-    log.moat(1);
-    log.green.bold("Available commands:");
-    log.plusIndent(2);
-    log.moat(0);
-    log.white(Object.keys(commands).join(log.ln));
-    log.popIndent();
-    return log.moat(1);
-  };
-  if (command === "--help") {
-    help();
-    process.exit();
+Q["try"](function() {
+  if (!GlobalConfig.plugins) {
+    return;
   }
-  modulePath = commands[command];
-  assertType(modulePath, [String, Void]);
-  if (modulePath == null) {
-    help();
+  return Q.all(sync.map(GlobalConfig.plugins, function(name) {
+    return Q["try"](function() {
+      var plugin;
+      plugin = lotus.Plugin(name);
+      return plugin.load();
+    }).fail(function(error) {
+      log.moat(1);
+      log.red("Plugin error: ");
+      log.white(name);
+      log.moat(0);
+      log.gray.dim(error.stack, " ");
+      log.moat(1);
+      return process.exit();
+    });
+  })).then(function() {
+    if (process.options._[0]) {
+      return;
+    }
+    if (!process.options.help) {
+      return;
+    }
+    printCommandList();
+    return process.exit();
+  });
+}).then(function() {
+  var runCommand;
+  runCommand = lotus.Plugin.commands[command];
+  if (runCommand === void 0) {
+    printCommandList();
     log.moat(1);
-    log.red("Invalid command: ");
+    log.red("Unknown command: ");
     log.white(command);
     log.moat(1);
     process.exit();
   }
-  return require(modulePath);
+  assert(isType(runCommand, Function), {
+    command: command,
+    reason: "The command failed to export a Function!"
+  });
+  return runCommand();
 }).done();
+
+printCommandList = function() {
+  var commands, i, len;
+  commands = Object.keys(lotus.Plugin.commands);
+  log.moat(1);
+  log.green("Available commands:");
+  log.plusIndent(2);
+  for (i = 0, len = commands.length; i < len; i++) {
+    command = commands[i];
+    log.moat(1);
+    log.gray.dim("lotus ");
+    log.white(command);
+  }
+  log.popIndent();
+  return log.moat(1);
+};
 
 //# sourceMappingURL=../../map/src/cli.map

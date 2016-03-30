@@ -1,68 +1,74 @@
 
 require "./global"
 
-log.clear()
-log.indent = 2
-log.moat 1
+lotus.File = require "./File"
+lotus.Module = require "./Module"
+lotus.Plugin = require "./Plugin"
 
-commands = {
-  watch: __dirname + "/watch"
-}
+minimist = require "minimist"
 
-argv = process.argv.slice 2
-command = argv[0] ?= "watch"
+process.cli = yes
+process.options = minimist process.argv.slice 2
 
-#
-# Plugin startup
-#
+command = process.options._[0] or "watch"
+
+lotus.Plugin.commands.watch = ->
+  require "./watch"
 
 Config = require "./Config"
 
 global.GlobalConfig = Config lotus.path
 
-log.moat 1
-log.green.bold "Global plugins:"
-log.moat 0
-log.plusIndent 2
-log.white Object.keys(GlobalConfig.plugins).join log.ln
-log.popIndent()
-log.moat 1
+Q.try ->
 
-process.cli = yes
+  return unless GlobalConfig.plugins
 
-# Allow global plugins to extend available commands.
-GlobalConfig.loadPlugins (plugin, options) ->
-  process.options = options
-  plugin commands
-  process.options = undefined
+  Q.all sync.map GlobalConfig.plugins, (name) ->
 
-.then ->
-  process.cli = no
+    Q.try ->
+      plugin = lotus.Plugin name
+      plugin.load()
 
-  help = ->
-    log.moat 1
-    log.green.bold "Available commands:"
-    log.plusIndent 2
-    log.moat 0
-    log.white Object.keys(commands).join log.ln
-    log.popIndent()
-    log.moat 1
+    .fail (error) ->
+      log.moat 1
+      log.red "Plugin error: "
+      log.white name
+      log.moat 0
+      log.gray.dim error.stack, " "
+      log.moat 1
+      process.exit()
 
-  if command is "--help"
-    help()
+  .then ->
+    return if process.options._[0]
+    return unless process.options.help
+    printCommandList()
     process.exit()
 
-  modulePath = commands[command]
-  assertType modulePath, [ String, Void ]
+.then ->
 
-  unless modulePath?
-    help()
+  runCommand = lotus.Plugin.commands[command]
+
+  if runCommand is undefined
+    printCommandList()
     log.moat 1
-    log.red "Invalid command: "
+    log.red "Unknown command: "
     log.white command
     log.moat 1
     process.exit()
 
-  require modulePath
+  assert (isType runCommand, Function), { command, reason: "The command failed to export a Function!" }
+  runCommand()
 
 .done()
+
+printCommandList = ->
+  commands = Object.keys lotus.Plugin.commands
+  log.moat 1
+  log.green "Available commands:"
+  log.plusIndent 2
+  for command in commands
+    log.moat 1
+    log.gray.dim "lotus "
+    log.white command
+  log.popIndent()
+  log.moat 1

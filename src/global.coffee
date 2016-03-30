@@ -1,26 +1,28 @@
 
-lotus = require "lotus-require"
+lotus = require "./index"
 lotus.forceAll = yes
+
+log = require "lotus-log"
+# log.clear()
+log.indent = 2
+log.moat 1
 
 combine = require "combine"
 define = require "define"
 
-define global, {
-  repl: lazy: -> require "lotus-repl"
-}
-
 combine global, {
+  log
   lotus
-  log: require "lotus-log"
+  isDev: require "isDev"
   emptyFunction: require "emptyFunction"
+  sync: require "sync"
+  Q: require "q"
 }
 
 combine global, props for props in [
   require "type-utils"
-  require "io"
 ]
 
-combine global, {
-  File: require "./File"
-  Module: require "./Module"
+define global, {
+  repl: lazy: -> require "lotus-repl"
 }

@@ -1,12 +1,33 @@
-var combine, define, i, len, lotus, props, ref;
+var combine, define, i, len, log, lotus, props, ref;
 
-lotus = require("lotus-require");
+lotus = require("./index");
 
 lotus.forceAll = true;
+
+log = require("lotus-log");
+
+log.indent = 2;
+
+log.moat(1);
 
 combine = require("combine");
 
 define = require("define");
+
+combine(global, {
+  log: log,
+  lotus: lotus,
+  isDev: require("isDev"),
+  emptyFunction: require("emptyFunction"),
+  sync: require("sync"),
+  Q: require("q")
+});
+
+ref = [require("type-utils")];
+for (i = 0, len = ref.length; i < len; i++) {
+  props = ref[i];
+  combine(global, props);
+}
 
 define(global, {
   repl: {
@@ -14,23 +35,6 @@ define(global, {
       return require("lotus-repl");
     }
   }
-});
-
-combine(global, {
-  lotus: lotus,
-  log: require("lotus-log"),
-  emptyFunction: require("emptyFunction")
-});
-
-ref = [require("type-utils"), require("io")];
-for (i = 0, len = ref.length; i < len; i++) {
-  props = ref[i];
-  combine(global, props);
-}
-
-combine(global, {
-  File: require("./File"),
-  Module: require("./Module")
 });
 
 //# sourceMappingURL=../../map/src/global.map

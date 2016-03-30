@@ -1,111 +1,79 @@
 
 require "coffee-script/register"
-Stack = require "stack"
-Stack.initialize()
 
 { isType, isKind, assert, assertType } = require "type-utils"
-{ sync, async } = require "io"
-{ log, color } = require "lotus-log"
+
 NamedFunction = require "named-function"
 KeyMirror = require "keymirror"
+Factory = require "factory"
 combine = require "combine"
+syncFs = require "io/sync"
 define = require "define"
+steal = require "steal"
+sync = require "sync"
 Path = require "path"
+log = require "lotus-log"
+Q = require "q"
+
+Plugin = require "./Plugin"
 
 module.exports =
-Config = NamedFunction "LotusConfig", (dir = ".") ->
+Config = Factory "Lotus_Config",
 
-  return new Config dir unless isKind this, Config
+  initArguments: (dir) ->
 
-  assert sync.isDir(dir), { dir, reason: "The given path is not a directory!" }
+    dir = "." unless dir
 
-  regex = /^lotus-config(\.[^\.]+)?$/
-  paths = sync.readDir dir
-  paths = sync.filter paths, (path) -> (regex.test path) and (sync.isFile dir + "/" + path)
-  json = null
+    assertType dir, String
 
-  for path in paths
-    path = Path.join dir, path
-    json = module.optional path, (error) -> throw error if error.code isnt "REQUIRE_FAILED"
-    if json isnt null then break
+    assert (syncFs.isDir dir), {
+      reason: "Lotus.Config() must be passed a directory!"
+      dir
+    }
 
-  assert json?, { path, reason: "Could not find 'lotus-config' file!" }
+    [ dir ]
 
-  Config.fromJSON.call this, path, json
+  init: (dir) ->
 
-reservedPluginNames = KeyMirror ["plugins"]
+    path = dir + "/lotus-config.coffee"
 
-define Config,
+    if syncFs.isFile path
+      json = module.optional path, @handleLoadError
 
-  fromJSON: (path, json) ->
+    unless json
 
-    unless isKind this, Config
-      config = Object.create Config.prototype
-      return Config.fromJSON.call config, path, json
+      path = dir + "/package.json"
 
-    { plugins, implicitDependencies } = json
+      if syncFs.isFile path
+        json = module.optional path, @handleLoadError
+        json = json.lotus if json
+        json = {} unless json
 
-    if isKind plugins, Array
-      plugins = KeyMirror plugins
+    assert (isType json, Object), {
+      reason: "Lotus.Config() failed to find valid configuration!"
+      dir
+      path
+    }
 
-    define this, ->
+    Config.fromJSON.call this, path, json
 
-      @ "plugins", { value: plugins }
+  handleLoadError: (error) ->
+    throw error if error.code isnt "REQUIRE_FAILED"
 
-      @frozen = yes
-      @
-        path: path
-        json: { value: json }
-        implicitDependencies: { value: implicitDependencies }
+  statics:
 
-define Config.prototype,
+    fromJSON: (path, json) ->
 
-  addPlugins: (plugins) ->
-    assertType plugins, Object
-    @plugins ?= {}
-    @plugins._add plugins if @plugins instanceof KeyMirror
-    @plugins[key] = plugin for key, plugin of plugins
+      unless this instanceof Config
+        config = Object.create Config.prototype
+        return Config.fromJSON.call config, path, json
 
-  loadPlugins: (iterator) ->
+      plugins = json.plugins ?= []
+      try assertType plugins, Array.Maybe
+      catch error then repl.sync (c) => eval c
 
-    unless @plugins?
-      error = Error "No plugins found."
-      error.fatal = no
-      return async.reject error
-
-    promise = async.fulfill()
-
-    aliases =
-      if @plugins instanceof KeyMirror then @plugins._keys
-      else Object.keys @plugins
-
-    async.each aliases, (alias) =>
-
-      if reservedPluginNames[alias]?
-        throw Error "'#{alias}' is reserved and cannot be used as a plugin name."
-
-      path = @plugins[alias]
-
-      if isType path, String
-        plugin = module.optional path, (error) ->
-          error.message = "Cannot find plugin '#{path}'." if error.code is "REQUIRE_FAILED"
-          throw error
-        plugin.path = path
-
-      else if isType path, Function
-        plugin = path
-
-      unless isKind plugin, Function
-        throw Error "'#{alias}' failed to export a Function."
-
-      plugin.alias = alias
-      async.try =>
-        iterator plugin, @json[alias] or {}
-      .fail (error) =>
-        log
-          .moat 1
-          .white "Plugin failed: "
-          .red alias
-          .moat 0
-          .gray error.stack
-          .moat 1
+      @path = path
+      @plugins = plugins
+      @implicitDependencies = steal json, "implicitDependencies"
+      @json = json
+      return this

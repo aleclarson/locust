@@ -1,226 +1,211 @@
 
-Lotus = require "./index"
-
-{ join, isAbsolute, dirname, basename, extname, relative } = require "path"
-{ assert, isKind, setType } = require "type-utils"
-{ async, sync } = require "io"
 { spawn } = require "child_process"
 
 NamedFunction = require "named-function"
 NODE_PATHS = require "node-paths"
+asyncFs = require "io/async"
 inArray = require "in-array"
+Factory = require "factory"
+syncFs = require "io/sync"
 Finder = require "finder"
-define = require "define"
-plural = require "plural"
-log = require "lotus-log"
-
-module.exports =
-Lotus.File = NamedFunction "File", (path, mod) ->
-
-  mod ?= Lotus.Module.forFile path
-
-  assert mod?, { path, reason: "This file belongs to an unknown module!" }
-
-  file = mod.files[path]
-  return file if file?
-
-  mod.files[path] =
-  file = setType {}, File
+async = require "async"
+Path = require "path"
 
-  assert (isAbsolute path), { path, reason: "The file path must be absolute!" }
+module.exports = Factory "Lotus_File",
 
-  name = basename path, extname path
-  dir = relative mod.path, dirname path
+  initArguments: (path, mod) ->
+    assertType path, String, "path"
+    assert Path.isAbsolute(path), { path, reason: "The file path must be absolute!" }
+    unless mod
+      mod = lotus.Module.forFile path
+      assert mod, { path, reason: "This file belongs to an unknown module!" }
+    [ path, mod ]
 
-  # log
-  #   .moat 1
-  #   .white "File found: "
-  #   .gray process.cwd(), "/"
-  #   .green relative process.cwd(), path
-  #   .moat 1
+  getFromCache: (path, mod) ->
+    mod.files[path]
 
-  define file, ->
+  initValues: (path, mod) ->
 
-    @options = configurable: no
-    @
-      contents: null
-      dependers: {}
-      dependencies: {}
+    name: Path.basename path, Path.extname path
 
-    @writable = no
-    @ {
-      name
-      dir
-      path
-      module: mod
-    }
+    dir: Path.relative mod.path, Path.dirname path
 
-    @options = enumerable: no
-    @
-      _initializing: null
-      _reading: null
+    path: path
 
-define Lotus.File,
+    module: mod
 
-  # Used to initialize a File with its JSON representation.
-  fromJSON: (file, json) ->
+    contents: null
 
-    if json.lastModified?
-      file.isInitialized = yes
-      file.lastModified = json.lastModified
+    dependers: {}
 
-    async.reduce json.dependers, {}, (dependers, path) ->
-      dependers[path] = Lotus.File path
-      dependers
+    dependencies: {}
 
-    .then (dependers) ->
-      file.dependers = dependers
+    _loading: null
 
-    .then ->
-      async.reduce json.dependencies, {}, (dependencies, path) ->
-        dependencies[path] = Lotus.File path
-        dependencies
+    _reading: null
 
-    .then (dependencies) ->
-      file.dependencies = dependencies
-      file
+  init: (path, mod) ->
+    mod.files[path] = this
 
-define Lotus.File.prototype, ->
-  @options =
-    configurable: no
-    writable: no
-  @
-    initialize: ->
-      return @_initializing if @_initializing
-      @_initializing = async.all [
-        @_loadLastModified()
-        @_loadDeps()
-      ]
+  # Must be called manually. Returns a Promise.
+  load: ->
+    return @_loading if @_loading
+    @_loading = Q.all [
+      @_loadLastModified()
+      @_loadDeps()
+    ]
 
-    read: (options = {}) ->
-      if options.force or not @_reading?
-        @contents = null
-        @_reading = async.read @path
-        .then (contents) => @contents = contents
-      @_reading
+  read: (options = {}) ->
+    if options.force or not @_reading?
+      @contents = null
+      @_reading = asyncFs.read @path
+      .then (contents) => @contents = contents
+    @_reading
 
-    delete: ->
+  delete: ->
 
-      sync.each @dependers, (file) =>
-        delete file.dependencies[@path]
+    sync.each @dependers, (file) =>
+      delete file.dependencies[@path]
 
-      sync.each @dependencies, (file) =>
-        delete file.dependers[@path]
+    sync.each @dependencies, (file) =>
+      delete file.dependers[@path]
 
-      delete @module.files[@path]
+    delete @module.files[@path]
 
-    toJSON: ->
-      dependers = Object.keys @dependers
-      dependencies = Object.keys @dependencies
-      { @path, dependers, dependencies, @lastModified }
+  toJSON: ->
+    dependers = Object.keys @dependers
+    dependencies = Object.keys @dependencies
+    { @path, dependers, dependencies, @lastModified }
 
-  @enumerable = no
-  @
-    _loadLastModified: ->
+  _loadLastModified: ->
 
-      async.stats @path
+    asyncFs.stats @path
 
-      .then (stats) =>
-        @lastModified = stats.node.mtime
+    .then (stats) =>
+      @lastModified = stats.node.mtime
 
-    _loadDeps: ->
+  _loadDeps: ->
 
-      async.read @path
+    asyncFs.read @path
 
-      .then (contents) =>
-        @_parseDeps contents
+    .then (contents) =>
+      @_parseDeps contents
 
-    _parseDeps: (contents) ->
+  _parseDeps: (contents) ->
 
-      depCount = 0
+    depCount = 0
 
-      depPaths = _findDepPath.all contents
+    depPaths = _findDepPath.all contents
 
-      async.each depPaths, (depPath) =>
+    Q.all sync.map depPaths, (depPath) =>
 
-        @_loadDep depPath
+      @_loadDep depPath
 
-        .then (dep) =>
+      .then (dep) =>
 
-          return unless dep?
+        return unless dep?
 
-          depCount++
+        depCount++
 
-          promise = _installMissing @module, dep.module
+        promise = _installMissing @module, dep.module
 
-          if promise?
-            @dependencies[dep.path] = dep
-            dep.dependers[@path] = this
+        if promise?
+          @dependencies[dep.path] = dep
+          dep.dependers[@path] = this
 
-          promise
+        promise
 
-    _loadDep: async.promised (depPath) ->
+  _loadDep: Q.fbind (depPath) ->
 
-      return if NODE_PATHS.indexOf(depPath) >= 0
+    return if NODE_PATHS.indexOf(depPath) >= 0
 
-      depFile = Lotus.resolve depPath, @path
+    depFile = lotus.resolve depPath, @path
 
-      return if depFile is null
+    return if depFile is null
 
-      if depPath[0] isnt "." and depPath.indexOf("/") < 0
+    if depPath[0] isnt "." and depPath.indexOf("/") < 0
 
-        mod = Lotus.Module.cache[depPath]
+      mod = lotus.Module.cache[depPath]
 
-        unless mod?
+      unless mod
 
-          try mod = Lotus.Module depPath
-          catch error
-            # log
-            #   .moat 1
-            #   .white "Module error: "
-            #   .red depPath
-            #   .moat 0
-            #   .gray (if log.isVerbose then error.stack else error.message)
-            #   .moat 1
-          return unless mod?
+        try mod = lotus.Module depPath
+        return unless mod
 
-          async.try ->
-            mod.initialize()
+        Q.try ->
+          mod.load()
 
-          .fail (error) ->
-            mod._retryInitialize error
+        .fail (error) ->
+          mod._retryLoad error
 
-        Lotus.File depFile, mod
+      lotus.File depFile, mod
 
-      depDir = depFile
+    depDir = depFile
 
-      async.loop (done) =>
+    async.loop (done) =>
 
-        newDepDir = dirname depDir
+      newDepDir = Path.dirname depDir
 
-        if newDepDir is "."
-          return done depDir
+      if newDepDir is "."
+        return done depDir
 
-        depDir = newDepDir
+      depDir = newDepDir
 
-        requiredJson = join depDir, "package.json"
+      requiredJson = Path.join depDir, "package.json"
 
-        async.isFile requiredJson
+      asyncFs.isFile requiredJson
 
-        .then (isFile) ->
+      .then (isFile) ->
 
-          return unless isFile
+        return unless isFile
 
-          done basename depDir
+        done Path.basename depDir
 
-      .then (modName) =>
-        mod = Lotus.Module.cache[modName]
-        mod ?= Lotus.Module modName
-        Lotus.File depFile, mod
+    .then (modName) =>
+      mod = lotus.Module.cache[modName]
+      mod ?= lotus.Module modName
+      lotus.File depFile, mod
+
+  statics:
+
+    # Used to initialize a File with its JSON representation.
+    fromJSON: (file, json) ->
+
+      if json.lastModified?
+        file.isInitialized = yes
+        file.lastModified = json.lastModified
+
+      Q.try ->
+        file.dependers = sync.reduce json.dependers, {}, (dependers, path) ->
+          depender = _getFile path
+          dependers[path] = depender if depender
+          dependers
+
+      .then ->
+        file.dependencies = sync.reduce json.dependencies, {}, (dependencies, path) ->
+          dependency = _getFile path
+          dependencies[path] = dependency if dependency
+          dependencies
+
+      .then ->
+        file
 
 ##
 ## HELPERS
 ##
+
+_ignoredErrors =
+
+  getFile: [
+    "This file belongs to an unknown module!"
+  ]
+
+_getFile = (path) ->
+  try file = lotus.File path
+  catch error
+    return unless inArray _ignoredErrors.getFile, error.message
+    throw error
+  return file
 
 _findDepPath = Finder
   regex: /(^|[\(\[\s\n]+)require\(("|')([^"']+)("|')/g
@@ -231,16 +216,16 @@ _unshiftContext = (fn) -> (context, args...) ->
 
 _installMissing = _unshiftContext (dep) ->
 
-  if !isKind this, Lotus.Module
-    throw TypeError "'this' must be a Lotus.Module"
+  if !isKind this, lotus.Module
+    throw TypeError "'this' must be a Lotus_Module"
 
-  if !isKind dep, Lotus.Module
-    throw TypeError "'dep' must be a Lotus.Module"
+  if !isKind dep, lotus.Module
+    throw TypeError "'dep' must be a Lotus_Module"
 
   if dep is this
     return no
 
-  info = JSON.parse sync.read @path + "/package.json"
+  info = JSON.parse syncFs.read @path + "/package.json"
 
   isIgnored =
     (info.dependencies?.hasOwnProperty dep.name) or
@@ -264,7 +249,7 @@ _installMissing = _unshiftContext (dep) ->
   #
   # if answer?
   #
-  #   deferred = async.defer()
+  #   deferred = Q.defer()
   #
   #   installer = spawn "npm", ["install", "--save", answer],
   #     stdio: ["ignore", "ignore", "ignore"]
