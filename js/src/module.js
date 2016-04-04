@@ -97,29 +97,35 @@ module.exports = Module = Factory("Lotus_Module", {
       };
     })(this));
   },
-  crawl: function(pattern) {
-    var deferred, files, fs, onAdd, self;
+  crawl: function(pattern, onFileChange) {
+    var deferred, files, fs, onAdd;
     pattern = Path.join(this.path, pattern);
+    if (onFileChange) {
+      Module.watch(pattern, onFileChange);
+    }
     if (this._patterns[pattern]) {
       return this._patterns[pattern].adding;
     }
     fs = this._patterns[pattern] = chokidar.watch();
     deferred = Q.defer();
-    self = this;
     files = Object.create(null);
-    fs.on("add", onAdd = function(path) {
-      if (!syncFs.isFile(path)) {
-        return;
-      }
-      return files[path] = lotus.File(path, self);
-    });
-    fs.once("ready", function() {
-      fs.removeListener("add", onAdd);
-      deferred.fulfill(files);
-      return fs.on("all", function(event, path) {
-        return self._onFileEvent(event, path);
-      });
-    });
+    fs.on("add", onAdd = (function(_this) {
+      return function(path) {
+        if (!syncFs.isFile(path)) {
+          return;
+        }
+        return files[path] = lotus.File(path, _this);
+      };
+    })(this));
+    fs.once("ready", (function(_this) {
+      return function() {
+        fs.removeListener("add", onAdd);
+        deferred.fulfill(files);
+        return fs.on("all", function(event, path) {
+          return _this._onFileChange(event, path);
+        });
+      };
+    })(this));
     fs.add(pattern);
     return fs.adding = deferred.promise;
   },
@@ -151,7 +157,7 @@ module.exports = Module = Factory("Lotus_Module", {
       };
     })(this));
   },
-  _onFileEvent: function(event, path) {
+  _onFileChange: function(event, path) {
     var file;
     if (event === "add") {
       if (!syncFs.isFile(path)) {

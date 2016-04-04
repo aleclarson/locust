@@ -1,14 +1,15 @@
 
 { assert } = require "type-utils"
 
+emptyFunction = require "emptyFunction"
 SortedArray = require "sorted-array"
 Factory = require "factory"
+didExit = require "exit"
 inArray = require "in-array"
 asyncFs = require "io/async"
 syncFs = require "io/sync"
 Path = require "path"
 sync = require "sync"
-exit = require "exit"
 log = require "lotus-log"
 Q = require "q"
 
@@ -87,10 +88,10 @@ module.exports = Factory "Lotus_Cache",
       log.moat 1
 
       # Mark the cache as dirty when a file is changed!
-      @_watcher = lotus.Module.didFileChange => @isDirty = yes
+      # @_watcher = lotus.Module.didFileChange => @isDirty = yes
 
       # Save the cache when the process exits!
-      exit.on => @save()
+      # didExit => @save()
 
   save: ->
     return Q() unless @isDirty

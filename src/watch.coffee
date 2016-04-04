@@ -8,7 +8,6 @@
 syncFs = require "io/sync"
 semver = require "semver"
 Path = require "path"
-exit = require "exit"
 
 Cache = require "./Cache"
 
@@ -25,7 +24,7 @@ Cache.load().then ->
 
   log.moat 1
   if newModules.length > 0
-    isDirty = yes
+    Cache.isDirty = yes
     log.white "Found #{log.color.green newModules.length} new modules: "
     log.moat 1
     log.plusIndent 2

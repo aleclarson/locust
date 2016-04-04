@@ -1,12 +1,10 @@
-var Cache, Path, exit, semver, syncFs;
+var Cache, Path, semver, syncFs;
 
 syncFs = require("io/sync");
 
 semver = require("semver");
 
 Path = require("path");
-
-exit = require("exit");
 
 Cache = require("./Cache");
 
@@ -17,10 +15,10 @@ Cache.load().then(function() {
   log.moat(1);
   return lotus.Module.crawl(lotus.path);
 }).then(function(newModules) {
-  var color, i, index, isDirty, len, module, newLength, newPart;
+  var color, i, index, len, module, newLength, newPart;
   log.moat(1);
   if (newModules.length > 0) {
-    isDirty = true;
+    Cache.isDirty = true;
     log.white("Found " + (log.color.green(newModules.length)) + " new modules: ");
     log.moat(1);
     log.plusIndent(2);

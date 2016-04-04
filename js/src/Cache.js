@@ -1,10 +1,14 @@
-var Factory, Path, Q, SortedArray, assert, asyncFs, exit, inArray, log, sync, syncFs;
+var Factory, Path, Q, SortedArray, assert, asyncFs, didExit, emptyFunction, inArray, log, sync, syncFs;
 
 assert = require("type-utils").assert;
+
+emptyFunction = require("emptyFunction");
 
 SortedArray = require("sorted-array");
 
 Factory = require("factory");
+
+didExit = require("exit");
 
 inArray = require("in-array");
 
@@ -15,8 +19,6 @@ syncFs = require("io/sync");
 Path = require("path");
 
 sync = require("sync");
-
-exit = require("exit");
 
 log = require("lotus-log");
 
@@ -89,13 +91,7 @@ module.exports = Factory("Lotus_Cache", {
         log.white(" in ");
         log.green(endTime - startTime);
         log.white(" ms!");
-        log.moat(1);
-        _this._watcher = lotus.Module.didFileChange(function() {
-          return _this.isDirty = true;
-        });
-        return exit.on(function() {
-          return _this.save();
-        });
+        return log.moat(1);
       };
     })(this));
   },

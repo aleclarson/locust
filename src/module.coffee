@@ -103,9 +103,12 @@ Module = Factory "Lotus_Module",
       @_loading = null
       throw error
 
-  crawl: (pattern) ->
+  crawl: (pattern, onFileChange) ->
 
     pattern = Path.join @path, pattern
+
+    if onFileChange
+      Module.watch pattern, onFileChange
 
     if @_patterns[pattern]
       return @_patterns[pattern].adding
@@ -114,22 +117,20 @@ Module = Factory "Lotus_Module",
 
     deferred = Q.defer()
 
-    self = this
-
     files = Object.create null
 
-    fs.on "add", onAdd = (path) ->
+    fs.on "add", onAdd = (path) =>
       return unless syncFs.isFile path
-      files[path] = lotus.File path, self
+      files[path] = lotus.File path, this
 
-    fs.once "ready", ->
+    fs.once "ready", =>
 
       fs.removeListener "add", onAdd
 
       deferred.fulfill files
 
-      fs.on "all", (event, path) ->
-        self._onFileEvent event, path
+      fs.on "all", (event, path) =>
+        @_onFileChange event, path
 
     fs.add pattern
     fs.adding = deferred.promise
@@ -155,7 +156,7 @@ Module = Factory "Lotus_Module",
 
       { @name, files, dependers, @dependencies, config }
 
-  _onFileEvent: (event, path) ->
+  _onFileChange: (event, path) ->
 
     if event is "add"
       return unless syncFs.isFile path

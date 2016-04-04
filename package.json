@@ -19,16 +19,14 @@
     "key-bindings": "aleclarson/key-bindings#1.0.0",
     "keymirror": "aleclarson/keymirror#1.0.0",
     "lotus-log": "aleclarson/lotus-log#1.0.0",
-    "lotus-repl": "aleclarson/lotus-repl#1.0.0",
     "lotus-require": "aleclarson/lotus-require#1.0.0",
     "micromatch": "^2.1.6",
+    "minimist": "~0.0.8",
     "named-function": "aleclarson/named-function#1.0.3",
-    "no-op": "^1.0.3",
     "node-paths": "aleclarson/node-paths#0.0.1",
     "plural": "^0.1.6",
     "q": "aleclarson/q#1.0.0",
     "semver": "^4.3.4",
-    "stack": "aleclarson/stack#1.0.0",
     "type-utils": "aleclarson/type-utils#1.0.0"
   },
   "repository": {
