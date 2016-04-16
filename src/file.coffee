@@ -1,7 +1,6 @@
 
 { spawn } = require "child_process"
 
-NamedFunction = require "named-function"
 NODE_PATHS = require "node-paths"
 asyncFs = require "io/async"
 inArray = require "in-array"

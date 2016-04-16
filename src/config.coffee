@@ -3,7 +3,6 @@ require "coffee-script/register"
 
 { isType, isKind, assert, assertType } = require "type-utils"
 
-NamedFunction = require "named-function"
 KeyMirror = require "keymirror"
 Factory = require "factory"
 combine = require "combine"

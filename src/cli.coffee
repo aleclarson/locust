@@ -15,7 +15,7 @@ command = process.options._[0] or "watch"
 lotus.Plugin.commands.watch = ->
   require "./watch"
 
-Config = require "./Config"
+global.Config = require "./Config"
 
 global.GlobalConfig = Config lotus.path
 

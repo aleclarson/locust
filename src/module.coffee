@@ -14,6 +14,7 @@ mm = require "micromatch"
 
 Config = require "./Config"
 
+# TODO: Encapsulate this in an ErrorMap.
 ignoredErrors =
 
   init: [

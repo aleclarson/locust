@@ -5,13 +5,27 @@
 # TODO: A command that lists the dependencies or dependers of each module.
 # TODO: Notify when dependencies exist that aren't being used.
 
+inArray = require "in-array"
 syncFs = require "io/sync"
 semver = require "semver"
 Path = require "path"
 
 Cache = require "./Cache"
 
-Cache.load().then ->
+ignoredErrors = [
+  "Cache does not exist!"
+  "Cache was manually reset!"
+]
+
+cache = Cache lotus.path + "/lotus-cache.json"
+
+cache.load process.options
+
+.fail (error) ->
+  return if inArray ignoredErrors, error.message
+  throw error
+
+.then ->
 
   log.moat 1
   log.white "Crawling: "
@@ -24,7 +38,7 @@ Cache.load().then ->
 
   log.moat 1
   if newModules.length > 0
-    Cache.isDirty = yes
+    cache.isDirty = yes
     log.white "Found #{log.color.green newModules.length} new modules: "
     log.moat 1
     log.plusIndent 2
@@ -38,7 +52,11 @@ Cache.load().then ->
   else
     log.white "Found #{log.color.green.dim 0} new modules!"
 
-  Cache.save().then ->
+  cache.save()
+
+  .then ->
     log.moat 1
-    log.cyan "Listening for file changes..."
+    log.gray "Watching files..."
     log.moat 1
+
+.done()

@@ -1,4 +1,6 @@
-var Cache, Path, semver, syncFs;
+var Cache, Path, cache, ignoredErrors, inArray, semver, syncFs;
+
+inArray = require("in-array");
 
 syncFs = require("io/sync");
 
@@ -8,7 +10,16 @@ Path = require("path");
 
 Cache = require("./Cache");
 
-Cache.load().then(function() {
+ignoredErrors = ["Cache does not exist!", "Cache was manually reset!"];
+
+cache = Cache(lotus.path + "/lotus-cache.json");
+
+cache.load(process.options).fail(function(error) {
+  if (inArray(ignoredErrors, error.message)) {
+    return;
+  }
+  throw error;
+}).then(function() {
   log.moat(1);
   log.white("Crawling: ");
   log.yellow(lotus.path);
@@ -18,7 +29,7 @@ Cache.load().then(function() {
   var color, i, index, len, module, newLength, newPart;
   log.moat(1);
   if (newModules.length > 0) {
-    Cache.isDirty = true;
+    cache.isDirty = true;
     log.white("Found " + (log.color.green(newModules.length)) + " new modules: ");
     log.moat(1);
     log.plusIndent(2);
@@ -36,11 +47,11 @@ Cache.load().then(function() {
   } else {
     log.white("Found " + (log.color.green.dim(0)) + " new modules!");
   }
-  return Cache.save().then(function() {
+  return cache.save().then(function() {
     log.moat(1);
-    log.cyan("Listening for file changes...");
+    log.gray("Watching files...");
     return log.moat(1);
   });
-});
+}).done();
 
 //# sourceMappingURL=../../map/src/watch.map

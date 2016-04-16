@@ -25,42 +25,37 @@ log = require("lotus-log");
 Q = require("q");
 
 module.exports = Factory("Lotus_Cache", {
-  singleton: true,
-  initValues: function() {
+  initValues: function(path) {
     return {
-      path: null,
+      path: path,
       isDirty: false,
       _watcher: null
     };
   },
-  load: function(path) {
+  load: function(options) {
     var error, startTime;
-    if (this.path !== null) {
-      error = Error("Cache is already loaded!");
-      return Q.reject(error);
+    if (options == null) {
+      options = {};
     }
-    this.path = path != null ? path : path = lotus.path + "/lotus-cache.json";
-    if (!syncFs.isFile(path)) {
+    if (!syncFs.isFile(this.path)) {
       error = Error("Cache does not exist!");
       return Q.reject(error);
     }
-    if (process.options.reset) {
+    if (options.reset) {
       log.moat(1);
-      log.gray("--reset");
-      log.moat(0);
-      log.white("Clearing ");
-      log.yellow("lotus-cache.json");
-      log.white("...");
+      log.white("Deleting: ");
+      log.red(this.path);
       log.moat(1);
-      syncFs.remove(path);
+      syncFs.remove(this.path);
       error = Error("Cache was manually reset!");
       return Q.reject(error);
     }
     log.moat(1);
-    log.cyan("Reading the 'lotus-cache.json' file...");
+    log.white("Reading cache: ");
+    log.yellow(this.path);
     log.moat(1);
     startTime = Date.now();
-    return asyncFs.read(path).then((function(_this) {
+    return asyncFs.read(this.path).then((function(_this) {
       return function(json) {
         return _this.fromJSON(JSON.parse(json));
       };
@@ -86,11 +81,9 @@ module.exports = Factory("Lotus_Cache", {
         }
         log.popIndent();
         log.moat(1);
-        log.white("Loaded ");
-        log.yellow("lotus-cache.json");
-        log.white(" in ");
-        log.green(endTime - startTime);
-        log.white(" ms!");
+        log.white("Loaded cache: ");
+        log.green(_this.path, " ");
+        log.pink(endTime - startTime, " ms");
         return log.moat(1);
       };
     })(this));
@@ -102,21 +95,19 @@ module.exports = Factory("Lotus_Cache", {
     }
     this.isDirty = false;
     startTime = Date.now();
-    return this.toJSON().then(function(json) {
-      var path;
-      path = lotus.path + "/lotus-cache.json";
-      return asyncFs.write(path, json).then(function() {
-        var endTime;
-        endTime = Date.now();
-        log.moat(1);
-        log.white("Saved ");
-        log.yellow("lotus-cache.json");
-        log.white(" in ");
-        log.green(endTime - startTime);
-        log.white(" ms!");
-        return log.moat(1);
-      });
-    });
+    return this.toJSON().then((function(_this) {
+      return function(json) {
+        return asyncFs.write(_this.path, json).then(function() {
+          var endTime;
+          endTime = Date.now();
+          log.moat(1);
+          log.white("Saved cache: ");
+          log.green(_this.path, " ");
+          log.pink(endTime - startTime, " ms");
+          return log.moat(1);
+        });
+      };
+    })(this));
   },
   toJSON: function() {
     var files, moduleNames, modules, startTime;
@@ -146,14 +137,12 @@ module.exports = Factory("Lotus_Cache", {
       });
     })).then(function() {
       log.moat(1);
-      log.white("Saving ");
-      log.yellow(modules.length);
-      log.white(" modules...");
+      log.white("Cached modules: ");
+      log.green(modules.length);
       log.moat(1);
       log.moat(1);
-      log.white("Saving ");
-      log.yellow(files.length);
-      log.white(" files...");
+      log.white("Cached files: ");
+      log.green(files.length);
       log.moat(1);
       return JSON.stringify({
         modules: modules,

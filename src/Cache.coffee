@@ -15,47 +15,37 @@ Q = require "q"
 
 module.exports = Factory "Lotus_Cache",
 
-  singleton: yes
+  initValues: (path) ->
 
-  initValues: ->
-
-    path: null
+    path: path
 
     isDirty: no
 
     _watcher: null
 
-  load: (path) ->
+  load: (options = {}) ->
 
-    if @path isnt null
-      error = Error "Cache is already loaded!"
-      return Q.reject error
-
-    @path = path ?= lotus.path + "/lotus-cache.json"
-
-    unless syncFs.isFile path
+    unless syncFs.isFile @path
       error = Error "Cache does not exist!"
       return Q.reject error
 
-    if process.options.reset
+    if options.reset
       log.moat 1
-      log.gray "--reset"
-      log.moat 0
-      log.white "Clearing "
-      log.yellow "lotus-cache.json"
-      log.white "..."
+      log.white "Deleting: "
+      log.red @path
       log.moat 1
-      syncFs.remove path
+      syncFs.remove @path
       error = Error "Cache was manually reset!"
       return Q.reject error
 
     log.moat 1
-    log.cyan "Reading the 'lotus-cache.json' file..."
+    log.white "Reading cache: "
+    log.yellow @path
     log.moat 1
 
     startTime = Date.now()
 
-    asyncFs.read path
+    asyncFs.read @path
 
     .then (json) =>
       @fromJSON JSON.parse json
@@ -80,11 +70,9 @@ module.exports = Factory "Lotus_Cache",
       log.popIndent()
 
       log.moat 1
-      log.white "Loaded "
-      log.yellow "lotus-cache.json"
-      log.white " in "
-      log.green endTime - startTime
-      log.white " ms!"
+      log.white "Loaded cache: "
+      log.green @path, " "
+      log.pink endTime - startTime, " ms"
       log.moat 1
 
       # Mark the cache as dirty when a file is changed!
@@ -98,17 +86,14 @@ module.exports = Factory "Lotus_Cache",
     @isDirty = no
     startTime = Date.now()
     @toJSON()
-    .then (json) ->
-      path = lotus.path + "/lotus-cache.json"
-      asyncFs.write path, json
-      .then ->
+    .then (json) =>
+      asyncFs.write @path, json
+      .then =>
         endTime = Date.now()
         log.moat 1
-        log.white "Saved "
-        log.yellow "lotus-cache.json"
-        log.white " in "
-        log.green endTime - startTime
-        log.white " ms!"
+        log.white "Saved cache: "
+        log.green @path, " "
+        log.pink endTime - startTime, " ms"
         log.moat 1
 
   toJSON: ->
@@ -146,15 +131,13 @@ module.exports = Factory "Lotus_Cache",
     .then ->
 
       log.moat 1
-      log.white "Saving "
-      log.yellow modules.length
-      log.white " modules..."
+      log.white "Cached modules: "
+      log.green modules.length
       log.moat 1
 
       log.moat 1
-      log.white "Saving "
-      log.yellow files.length
-      log.white " files..."
+      log.white "Cached files: "
+      log.green files.length
       log.moat 1
 
       JSON.stringify { modules, files }
