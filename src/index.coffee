@@ -1,2 +1,2 @@
 
-module.exports = require "../../../lotus-require"
+module.exports = require "lotus-require"

@@ -1,6 +1,5 @@
 {
   "name": "lotus",
-  "description": "Local development utilities for JavaScript.",
   "version": "1.0.0",
   "bin": {
     "lotus": "./bin/lotus"
@@ -27,6 +26,11 @@
     "q": "aleclarson/q#1.0.0",
     "semver": "^4.3.4",
     "type-utils": "aleclarson/type-utils#1.0.0"
+  },
+  "lotus": {
+    "plugins": [
+      "lotus-coffee"
+    ]
   },
   "repository": {
     "type": "git",
