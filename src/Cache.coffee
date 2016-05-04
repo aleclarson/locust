@@ -3,25 +3,27 @@
 
 emptyFunction = require "emptyFunction"
 SortedArray = require "sorted-array"
-Factory = require "factory"
 didExit = require "exit"
 inArray = require "in-array"
 asyncFs = require "io/async"
 syncFs = require "io/sync"
+Type = require "Type"
 Path = require "path"
 sync = require "sync"
-log = require "lotus-log"
+log = require "log"
 Q = require "q"
 
-module.exports = Factory "Lotus_Cache",
+type = Type "Lotus_Cache"
 
-  initValues: (path) ->
+type.defineValues
 
-    path: path
+  path: (path) -> path
 
-    isDirty: no
+  isDirty: no
 
-    _watcher: null
+  _watcher: null
+
+type.defineMethods
 
   load: (options = {}) ->
 
@@ -228,3 +230,5 @@ module.exports = Factory "Lotus_Cache",
     .then ->
       sync.map loadedModules.array, ({ module }) ->
         module
+
+module.exports = type.build()

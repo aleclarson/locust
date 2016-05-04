@@ -1,45 +1,54 @@
 
 KeyMirror = require "keymirror"
 inArray = require "in-array"
-Factory = require "factory"
+Type = require "Type"
 
-reservedNames = KeyMirror [ "plugins" ]
+RESERVED_NAMES = { plugins: yes }
 
-cache = Object.create null
+type = Type "Plugin"
 
-module.exports =
-Plugin = Factory "Plugin",
+type.argumentTypes =
+  name: String
 
-  initArguments: (name) ->
+type.returnCached (name) ->
+  assert not RESERVED_NAMES[name], "A plugin cannot be named '#{name}'!"
+  return name
+
+type.defineStatics
+
+  commands: Object.create null
+
+  injectedPlugins: []
+
+  inject: (name) ->
     assertType name, String
-    assert reservedNames[name] is undefined, "A plugin cannot be named '#{name}'!"
-    [ name ]
+    return if inArray Plugin.injectedPlugins, name
+    plugin = Plugin name
+    plugin.load()
+    Plugin.injectedPlugins.push name
+    return
 
-  getFromCache: (name) ->
-    cache[name]
+type.defineValues
 
-  customValues:
+  name: (name) -> name
 
-    isLoaded: get: ->
-      @_exports isnt null
+  isLoading: no
 
-  initValues: (name) ->
+  _exports: null
 
-    name: name
+  _initModule: null
 
-    _loading: no
+type.defineProperties
 
-    _exports: null
+  isLoaded: get: ->
+    @_exports isnt null
 
-    _initModule: null
-
-  init: (name) ->
-    cache[name] = this
+type.defineMethods
 
   load: ->
 
-    return if @isLoaded or @_loading
-    @_loading = yes
+    return if @isLoaded or @isLoading
+    @isLoading = yes
 
     # TODO: Check 'node_modules' before using $LOTUS_PATH.
     #       Check global 'node_modules' if not present in $LOTUS_PATH.
@@ -54,8 +63,7 @@ Plugin = Factory "Plugin",
       injectPlugin: Plugin.inject
 
     @_exports = initPlugin.call context
-    @_loading = no
-
+    @isLoading = no
     return
 
   initModule: (module, options) ->
@@ -102,16 +110,4 @@ Plugin = Factory "Plugin",
 
     @_initModule module, options
 
-  statics:
-
-    commands: Object.create null
-
-    injectedPlugins: []
-
-    inject: (name) ->
-      assertType name, String
-      return if inArray Plugin.injectedPlugins, name
-      plugin = Plugin name
-      plugin.load()
-      Plugin.injectedPlugins.push plugin
-      return
+module.exports = Plugin = type.build()

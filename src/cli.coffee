@@ -1,9 +1,9 @@
 
-require "./global"
+require "./Global"
 
-lotus.File = require "./File"
-lotus.Module = require "./Module"
 lotus.Plugin = require "./Plugin"
+lotus.Module = require "./Module"
+lotus.File = require "./File"
 
 minimist = require "minimist"
 
@@ -66,8 +66,8 @@ printCommandList = ->
   log.moat 1
   log.green "Available commands:"
   log.plusIndent 2
-  for command in commands
-    log.moat 1
+  sync.each commands, (command) ->
+    log.moat 0
     log.gray.dim "lotus "
     log.white command
   log.popIndent()

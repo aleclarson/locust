@@ -3,90 +3,73 @@
 
 SortedArray = require "sorted-array"
 chokidar = require "chokidar"
-Factory = require "factory"
 inArray = require "in-array"
 syncFs = require "io/sync"
-SemVer = require "semver"
 plural = require "plural"
+match = require "micromatch"
 Event = require "event"
 Path = require "path"
-mm = require "micromatch"
+Type = require "Type"
 
 Config = require "./Config"
 
-# TODO: Encapsulate this in an ErrorMap.
-ignoredErrors =
+type = Type "Lotus_Module"
 
-  init: [
-    "Module path must be a directory!"
-    "Module with that name already exists!"
-    "Module ignored by global config file!"
-  ]
+type.createArguments (args) ->
+  args[1] = Path.resolve lotus.path, args[0]
+  return args
 
-  load: [
-    "Lotus.Config() failed to find valid configuration!"
-    "Lotus.Config() must be passed a directory!"
-  ]
+type.initInstance (name, path) ->
 
-module.exports =
-Module = Factory "Lotus_Module",
-
-  initArguments: (name) ->
-
-    assert (not Module.cache[name]?), {
-      name
-      reason: "Module with that name already exists!"
-    }
-
-    assert (name[0] isnt "/") and (name[0..1] isnt "./"), {
-      name
-      reason: "Module name cannot begin with `/` or `./`!"
-    }
-
-    path = Path.resolve lotus.path, name
-
-    assert (syncFs.isDir path), {
-      reason: "Module path must be a directory!"
-      path
-    }
-
-    assert (not inArray GlobalConfig.json.ignoredModules, name), {
-      reason: "Module ignored by global config file!"
-      name
-      path
-    }
-
-    [ name, path ]
-
-  getFromCache: (name) ->
-    Module.cache[name]
-
-  initValues: (name, path) ->
-
+  assert not Module.cache[name],
+    reason: "Module with that name already exists!"
     name: name
 
+  assert name[0] isnt "/",
+    reason: "Module name cannot begin with '/'!"
+    name: name
+
+  assert name[0..1] isnt "./",
+    reason: "Module name cannot begin with './'!"
+    name: name
+
+  assert syncFs.isDir(path),
+    reason: "Module path must be a directory!"
     path: path
 
-    files: {}
+  assert not inArray(GlobalConfig.json.ignoredModules, name),
+    reason: "Module ignored by global config file!"
+    name: name
+    path: path
 
-    versions: {}
+type.returnCached (name) ->
+  return name
 
-    dependers: {}
+type.defineValues
 
-    dependencies: {}
+  name: (name) -> name
 
-    _deleted: no
+  path: (_, path) -> path
 
-    _patterns: Object.create null
+  files: -> {}
 
-    _loading: null
+  versions: -> {}
 
-    _retryWatcher: null
+  dependers: -> {}
 
-    _reportedMissing: {}
+  dependencies: -> {}
 
-  init: (name) ->
-    Module.cache[name] = this
+  _deleted: no
+
+  _patterns: -> Object.create null
+
+  _loading: null
+
+  _retryWatcher: null
+
+  _reportedMissing: -> {}
+
+type.defineMethods
 
   load: (options = {}) ->
 
@@ -181,7 +164,7 @@ Module = Factory "Lotus_Module",
 
   _retryLoad: (error) ->
     return if @_deleted
-    reportModuleError @name, error, ignoredErrors.load
+    reportModuleError @name, error, knownErrors.load
     return if @_retryWatcher
     @_retryWatcher = chokidar.watch @path, { depth: 1 }
     @_retryWatcher.once "ready", =>
@@ -218,17 +201,24 @@ Module = Factory "Lotus_Module",
 
   _loadPlugins: ->
 
-    plugins = [].concat lotus.Plugin.injectedPlugins
+    pluginNames = [].concat lotus.Plugin.injectedPlugins
 
     if @config.plugins
       for name in @config.plugins
-        plugins.push lotus.Plugin name
+        pluginNames.push lotus.Plugin name
 
-    return Q() unless plugins.length > 0
+    if pluginNames.length is 0
+      return Q()
 
     failedPlugin = null
 
-    Q.all plugins.map (plugin) =>
+    Q.all pluginNames.map (pluginName) =>
+
+      if isType pluginName, lotus.Plugin
+        plugin = pluginName
+
+      else
+        plugin = lotus.Plugin pluginName
 
       Q.try =>
         options = @config.json[plugin.name] or {}
@@ -250,107 +240,143 @@ Module = Factory "Lotus_Module",
       log.moat 1
       process.exit()
 
-  statics:
+type.defineStatics
 
-    didFileChange: Event()
+  didFileChange: Event()
 
-    cache: Object.create null
+  # Watch the files that match the given 'pattern'.
+  # Only the files that have been registered via 'module.watch()' will be used.
+  watch: (options, callback) ->
+    options = include: options if isType options, String
+    options.include ?= "**/*"
+    return Module.didFileChange ({ file, event }) ->
+      return if match(file.path, options.include).length is 0
+      return if options.exclude? and match(file.path, options.exclude).length > 0
+      callback file, event, options
 
-    # Watch the files that match the given 'pattern'.
-    # Only the files that have been registered via 'module.watch()' will be used.
-    watch: (options, callback) ->
-      options = include: options if isType options, String
-      options.include ?= "**/*"
-      return lotus.Module.didFileChange ({ file, event }) ->
-        return if mm(file.path, options.include).length is 0
-        return if options.exclude? and mm(file.path, options.exclude).length > 0
-        callback file, event, options
+  crawl: (dir, options) ->
 
-    crawl: (dir, options) ->
+    assert not Module.fs,
+      reason: "Cannot call 'Module.crawl' more than once!"
 
-      if lotus.Module.fs
-        throw Error "Lotus.Module.crawl() can only be called once!"
+    promises = []
+    newModules = SortedArray [], (a, b) ->
+      a = a.name.toLowerCase()
+      b = b.name.toLowerCase()
+      if a > b then 1 else -1
 
-      promises = []
-      newModules = SortedArray [], (a, b) ->
-        a = a.name.toLowerCase()
-        b = b.name.toLowerCase()
-        if a > b then 1 else -1
+    Module.fs = fs = chokidar.watch dir, { depth: 0 }
 
-      lotus.Module.fs =
-      fs = chokidar.watch dir, { depth: 0 }
+    fs.on "addDir", (path) ->
 
-      fs.on "addDir", (path) ->
+      return if path is lotus.path
 
-        return if path is lotus.path
+      name = Path.relative lotus.path, path
 
-        name = Path.relative lotus.path, path
+      promise = Q.try ->
 
-        promises.push Q.try( ->
+        return if Module.cache[name]
 
-          mod = lotus.Module name
+        mod = Module name
 
-          mod.load options
+        mod.load options
 
-          .then ->
-            newModules.insert mod
+        .then ->
+          newModules.insert mod
 
-          .fail (error) ->
-            mod._retryLoad error
-            return
+        .fail (error) ->
+          mod._retryLoad error
+          return
 
-        ).fail (error) ->
-          reportModuleError name, error, ignoredErrors.init
+      .fail (error) ->
+        reportModuleError name, error, knownErrors.init
 
-      fs.on "unlinkDir", (path) ->
-        name = Path.relative lotus.path, path
-        lotus.Module.cache[name]?._delete()
+      promises.push promise
 
-      deferred = Q.defer()
+    fs.on "unlinkDir", (path) ->
+      name = Path.relative lotus.path, path
+      Module.cache[name]?._delete()
 
-      fs.once "ready", ->
-        Q.all promises
-        .then -> deferred.resolve newModules.array
-        .done()
+    deferred = Q.defer()
 
-      deferred.promise
+    fs.once "ready", ->
+      Q.all promises
+      .then -> deferred.resolve newModules.array
+      .done()
 
-    forFile: (path) ->
-      path = Path.relative lotus.path, path
-      name = path.slice 0, path.indexOf "/"
-      lotus.Module.cache[name]
+    return deferred.promise
 
-    fromJSON: (json) ->
+  forFile: (path) ->
+    path = Path.relative lotus.path, path
+    name = path.slice 0, path.indexOf "/"
+    return Module.cache[name]
 
-      { name, files, dependers, dependencies, config } = json
+  fromJSON: (json) ->
 
-      mod = lotus.Module.cache[name]
-      mod ?= lotus.Module name
+    { name, files, dependers, dependencies, config } = json
 
-      # TODO Might not want this...
-      mod._loading = Q()
+    return if Module.cache[name]
 
-      mod.config = Config.fromJSON config.path, config.json
-      mod.dependencies = dependencies
+    mod = Module name
 
-      mod.files = sync.reduce files, {}, (files, path) ->
-        path = Path.resolve mod.path, path
-        files[path] = lotus.File path, mod
-        files
+    # TODO Might not want this...
+    mod._loading = Q()
 
-      { module: mod, dependers }
+    mod.config = Config.fromJSON config.path, config.json
+    mod.dependencies = dependencies
 
-reportModuleError = (moduleName, error, ignoredErrors) ->
+    mod.files = sync.reduce files, {}, (files, path) ->
+      path = Path.resolve mod.path, path
+      files[path] = lotus.File path, mod
+      files
+
+    return {
+      module: mod
+      dependers
+    }
+
+module.exports = Module = type.build()
+
+reportModuleError = (moduleName, error, options = {}) ->
 
   assertType moduleName, String
   assertType error, Error.Kind
 
-  if isType ignoredErrors, Array
-    return if inArray ignoredErrors, error.message
+  if isType options.warn, Array
+    if inArray options.warn, error.message
+      log.moat 1
+      log.yellow "WARN: "
+      log.white moduleName
+      log.moat 0
+      log.gray.dim error.message
+      log.moat 1
+      error.catch?()
+      return
+
+  if isType options.quiet, Array
+    if inArray options.quiet, error.message
+      error.catch?()
+      return
 
   log.moat 1
-  log.red "Module error: "
+  log.red "ERROR: "
   log.white moduleName
   log.moat 0
   log.gray.dim error.stack
   log.moat 1
+  return
+
+knownErrors =
+
+  init:
+    quiet: [
+      "Module path must be a directory!"
+      "Module with that name already exists!"
+      "Module ignored by global config file!"
+    ]
+
+  load:
+    quiet: [
+      "Expected an existing directory!"
+      "Failed to find configuration file!"
+    ]

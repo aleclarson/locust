@@ -25,6 +25,7 @@
     "plural": "^0.1.6",
     "q": "aleclarson/q#1.0.0",
     "semver": "^4.3.4",
+    "sorted-array": "aleclarson/sorted-array#1.0.0",
     "type-utils": "aleclarson/type-utils#1.0.0"
   },
   "lotus": {
