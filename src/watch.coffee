@@ -12,34 +12,18 @@ Path = require "path"
 
 Cache = require "./Cache"
 
-ignoredErrors = [
-  "Cache does not exist!"
-  "Cache was manually reset!"
-]
+log.moat 1
+log.white "Crawling: "
+log.yellow lotus.path
+log.moat 1
 
-cache = Cache lotus.path + "/lotus-cache.json"
-
-cache.load process.options
-
-.fail (error) ->
-  return if inArray ignoredErrors, error.message
-  throw error
-
-.then ->
-
-  log.moat 1
-  log.white "Crawling: "
-  log.yellow lotus.path
-  log.moat 1
-
-  lotus.Module.crawl lotus.path
+lotus.Module.crawl lotus.path
 
 .then (newModules) ->
 
   log.moat 1
   if newModules.length > 0
-    cache.isDirty = yes
-    log.white "Found #{log.color.green newModules.length} new modules: "
+    log.white "Found #{log.color.green newModules.length} modules: "
     log.moat 1
     log.plusIndent 2
     for module, index in newModules
@@ -50,13 +34,10 @@ cache.load process.options
       log[color] newPart
     log.popIndent()
   else
-    log.white "Found #{log.color.green.dim 0} new modules!"
+    log.white "Found #{log.color.green.dim 0} modules!"
 
-  cache.save()
-
-  .then ->
-    log.moat 1
-    log.gray "Watching files..."
-    log.moat 1
+  log.moat 1
+  log.gray "Watching files..."
+  log.moat 1
 
 .done()

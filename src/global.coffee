@@ -30,5 +30,5 @@ combine global, props for props in [
 ]
 
 define global, {
-  repl: lazy: -> require "lotus-repl"
+  repl: lazy: -> require "repl"
 }

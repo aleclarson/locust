@@ -85,8 +85,8 @@ type.defineStatics({
     plugins = json.plugins != null ? json.plugins : json.plugins = [];
     try {
       assertType(plugins, Array.Maybe);
-    } catch (_error) {
-      error = _error;
+    } catch (error1) {
+      error = error1;
       repl.sync((function(_this) {
         return function(c) {
           return eval(c);
@@ -103,4 +103,4 @@ type.defineStatics({
 
 module.exports = Config = type.build();
 
-//# sourceMappingURL=../../map/src/Config.map
+//# sourceMappingURL=../../map/src/config.map

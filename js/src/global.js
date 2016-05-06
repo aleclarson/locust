@@ -38,9 +38,9 @@ for (i = 0, len = ref.length; i < len; i++) {
 define(global, {
   repl: {
     lazy: function() {
-      return require("lotus-repl");
+      return require("repl");
     }
   }
 });
 
-//# sourceMappingURL=../../map/src/Global.map
+//# sourceMappingURL=../../map/src/global.map

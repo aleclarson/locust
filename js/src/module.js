@@ -1,4 +1,4 @@
-var Config, Event, Module, Path, SortedArray, Type, chokidar, inArray, knownErrors, match, plural, reportModuleError, syncFs, type;
+var Config, Event, Module, Path, Q, SortedArray, Type, chokidar, inArray, knownErrors, match, plural, reportModuleError, syncFs, type;
 
 SortedArray = require("sorted-array");
 
@@ -18,9 +18,16 @@ Path = require("path");
 
 Type = require("Type");
 
+Q = require("q");
+
 Config = require("./Config");
 
 type = Type("Lotus_Module");
+
+type.argumentTypes = {
+  name: String,
+  path: String
+};
 
 type.createArguments(function(args) {
   args[1] = Path.resolve(lotus.path, args[0]);
@@ -63,16 +70,7 @@ type.defineValues({
     return path;
   },
   files: function() {
-    return {};
-  },
-  versions: function() {
-    return {};
-  },
-  dependers: function() {
-    return {};
-  },
-  dependencies: function() {
-    return {};
+    return Object.create(null);
   },
   _deleted: false,
   _patterns: function() {
@@ -95,15 +93,17 @@ type.defineMethods({
     }
     return this._loading = Q["try"]((function(_this) {
       return function() {
-        if (options.loadConfig !== false) {
-          return _this.config = Config(_this.path);
+        if (options.skipConfig) {
+          return;
         }
+        _this.config = Config(_this.path);
       };
     })(this)).then((function(_this) {
       return function() {
-        if (options.loadPlugins !== false) {
-          return _this._loadPlugins();
+        if (options.skipPlugins) {
+          return;
         }
+        return _this._loadPlugins();
       };
     })(this)).fail((function(_this) {
       return function(error) {
@@ -113,92 +113,41 @@ type.defineMethods({
     })(this));
   },
   crawl: function(pattern, onFileChange) {
-    var deferred, files, fs, onAdd;
+    var deferred, files, fs, onFileAdded, onceFilesReady;
     pattern = Path.join(this.path, pattern);
     if (onFileChange) {
       Module.watch(pattern, onFileChange);
     }
-    if (this._patterns[pattern]) {
-      return this._patterns[pattern].adding;
+    fs = this._patterns[pattern];
+    if (fs) {
+      return fs.adding;
     }
-    fs = this._patterns[pattern] = chokidar.watch();
     deferred = Q.defer();
+    fs = chokidar.watch();
     files = Object.create(null);
-    fs.on("add", onAdd = (function(_this) {
+    onFileAdded = (function(_this) {
       return function(path) {
         if (!syncFs.isFile(path)) {
           return;
         }
         return files[path] = lotus.File(path, _this);
       };
-    })(this));
-    fs.once("ready", (function(_this) {
+    })(this);
+    onceFilesReady = (function(_this) {
       return function() {
-        fs.removeListener("add", onAdd);
+        fs.removeListener("add", onFileAdded);
         deferred.fulfill(files);
         return fs.on("all", function(event, path) {
-          return _this._onFileChange(event, path);
+          var file;
+          file = lotus.File(path, _this);
+          return Module.didFileChange.emit(event, file);
         });
       };
-    })(this));
+    })(this);
+    fs.on("add", onFileAdded);
+    fs.once("ready", onceFilesReady);
     fs.add(pattern);
     return fs.adding = deferred.promise;
-  },
-  toJSON: function() {
-    if (!this._loading) {
-      return false;
-    }
-    return this._loading.then((function(_this) {
-      return function() {
-        var config, dependers, files;
-        config = {
-          path: _this.config.path,
-          json: _this.config.json
-        };
-        files = Object.keys(_this.files);
-        if (files.length > 0) {
-          files = sync.map(files, function(path) {
-            return Path.relative(_this.path, path);
-          });
-        }
-        dependers = Object.keys(_this.dependers);
-        return {
-          name: _this.name,
-          files: files,
-          dependers: dependers,
-          dependencies: _this.dependencies,
-          config: config
-        };
-      };
-    })(this));
-  },
-  _onFileChange: function(event, path) {
-    var file;
-    if (event === "add") {
-      if (!syncFs.isFile(path)) {
-        return;
-      }
-    } else if (!this.files[path]) {
-      log.moat(1);
-      log.white("Unknown file: ");
-      log.red(path);
-      log.moat(1);
-      log.format(this.files, {
-        maxObjectDepth: 0
-      });
-      log.moat(1);
-      return;
-    }
-    file = lotus.File(path, this);
-    if (event === "unlink") {
-      file["delete"]();
-    }
-    return process.nextTick(function() {
-      return Module.didFileChange.emit({
-        file: file,
-        event: event
-      });
-    });
   },
   _retryLoad: function(error) {
     if (this._deleted) {
@@ -238,19 +187,6 @@ type.defineMethods({
       this._retryWatcher.close();
       this._retryWatcher = null;
     }
-    sync.each(this.dependers, (function(_this) {
-      return function(mod) {
-        return delete mod.dependencies[_this.name];
-      };
-    })(this));
-    sync.each(this.dependencies, (function(_this) {
-      return function(mod) {
-        return delete mod.dependers[_this.name];
-      };
-    })(this));
-    sync.each(this.files, function(file) {
-      return file["delete"]();
-    });
     return delete Module.cache[this.name];
   },
   _loadPlugins: function() {
@@ -314,9 +250,7 @@ type.defineStatics({
     if (options.include == null) {
       options.include = "**/*";
     }
-    return Module.didFileChange(function(arg) {
-      var event, file;
-      file = arg.file, event = arg.event;
+    return Module.didFileChange(function(event, file) {
       if (match(file.path, options.include).length === 0) {
         return;
       }
@@ -384,26 +318,6 @@ type.defineStatics({
     path = Path.relative(lotus.path, path);
     name = path.slice(0, path.indexOf("/"));
     return Module.cache[name];
-  },
-  fromJSON: function(json) {
-    var config, dependencies, dependers, files, mod, name;
-    name = json.name, files = json.files, dependers = json.dependers, dependencies = json.dependencies, config = json.config;
-    if (Module.cache[name]) {
-      return;
-    }
-    mod = Module(name);
-    mod._loading = Q();
-    mod.config = Config.fromJSON(config.path, config.json);
-    mod.dependencies = dependencies;
-    mod.files = sync.reduce(files, {}, function(files, path) {
-      path = Path.resolve(mod.path, path);
-      files[path] = lotus.File(path, mod);
-      return files;
-    });
-    return {
-      module: mod,
-      dependers: dependers
-    };
   }
 });
 
@@ -454,4 +368,4 @@ knownErrors = {
   }
 };
 
-//# sourceMappingURL=../../map/src/Module.map
+//# sourceMappingURL=../../map/src/module.map
