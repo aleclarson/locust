@@ -1,0 +1,396 @@
+var Module, Path, Q, SortedArray, Tracer, Type, asyncFs, errorConfig, globby, inArray, sync, syncFs, type;
+
+SortedArray = require("sorted-array");
+
+inArray = require("in-array");
+
+asyncFs = require("io/async");
+
+syncFs = require("io/sync");
+
+Tracer = require("tracer");
+
+globby = require("globby");
+
+sync = require("sync");
+
+Path = require("path");
+
+Type = require("Type");
+
+Q = require("q");
+
+type = Type("Lotus_Module");
+
+type.argumentTypes = {
+  name: String,
+  path: String
+};
+
+type.createArguments(function(args) {
+  if (args[1] == null) {
+    args[1] = Path.resolve(lotus.path, args[0]);
+  }
+  return args;
+});
+
+type.returnCached(function(name) {
+  return name;
+});
+
+type.defineValues({
+  name: function(name) {
+    return name;
+  },
+  path: function(_, path) {
+    return path;
+  },
+  files: function() {
+    return Object.create(null);
+  },
+  _loading: function() {
+    return Object.create(null);
+  },
+  _crawling: null
+});
+
+type.defineProperties({
+  dest: {
+    value: null,
+    didSet: function(newValue) {
+      assertType(newValue, String);
+      assert(Path.isAbsolute(newValue), {
+        path: newValue,
+        reason: "'dest' must be an absolute path!"
+      });
+      return assert(syncFs.isDir(newValue), {
+        path: newValue,
+        reason: "'dest' must be an existing directory!"
+      });
+    }
+  },
+  specDest: {
+    value: null,
+    didSet: function(newValue) {
+      assertType(newValue, String);
+      assert(Path.isAbsolute(newValue), {
+        path: newValue,
+        reason: "'specDest' must be an absolute path!"
+      });
+      return assert(syncFs.isDir(newValue), {
+        path: newValue,
+        reason: "'specDest' must be an existing directory!"
+      });
+    }
+  }
+});
+
+type.initInstance(function() {
+  var dest, specDest;
+  assert(this.name[0] !== "/", {
+    mod: this,
+    reason: "Module name cannot begin with '/'!"
+  });
+  assert(this.name.slice(0, 2) !== "./", {
+    mod: this,
+    reason: "Module name cannot begin with './'!"
+  });
+  assert(syncFs.isDir(this.path), {
+    mod: this,
+    reason: "Module path must be a directory!"
+  });
+  assert(!inArray(lotus.config.ignoredModules, this.name), {
+    mod: this,
+    reason: "Module ignored by global config file!"
+  });
+  dest = this.path + "/js/src";
+  if (syncFs.isDir(dest)) {
+    this.dest = dest;
+  }
+  specDest = this.path + "/js/spec";
+  if (syncFs.isDir(specDest)) {
+    this.specDest = specDest;
+  }
+  if (process.options.printModules) {
+    log.moat(1);
+    log.green.dim("new Module(");
+    log.green("\"" + this.name + "\"");
+    log.green.dim(")");
+    return log.moat(1);
+  }
+});
+
+type.defineMethods({
+  load: function(names) {
+    var queue, tracer;
+    assertType(names, Array);
+    tracer = Tracer("module.load()");
+    queue = Q();
+    sync.each(names, (function(_this) {
+      return function(name) {
+        return queue = queue.then(function() {
+          var base;
+          return (base = _this._loading)[name] != null ? base[name] : base[name] = Q["try"](function() {
+            var load;
+            load = Module._loaders[name];
+            assert(isType(load, Function), {
+              mod: _this,
+              name: name,
+              reason: "Invalid loader!"
+            });
+            return load.call(_this);
+          }).fail(function(error) {
+            _this._loading[name] = null;
+            return throwFailure(error, {
+              mod: _this,
+              name: name,
+              stack: tracer()
+            });
+          });
+        });
+      };
+    })(this));
+    return queue;
+  },
+  crawl: function() {
+    if (this._crawling) {
+      return this._crawling;
+    }
+    assert(this.dest, {
+      mod: this,
+      reason: "Can only crawl module when its 'dest' is defined!"
+    });
+    return this._crawling = globby([this.path + "/*.js", this.dest + "/**/*.js"]).then((function(_this) {
+      return function(paths) {
+        var i, len, path;
+        for (i = 0, len = paths.length; i < len; i++) {
+          path = paths[i];
+          lotus.File(path, _this);
+        }
+        return _this.files;
+      };
+    })(this));
+  },
+  saveConfig: function() {
+    var json, path;
+    if (!this.config) {
+      return;
+    }
+    path = this.path + "/package.json";
+    json = JSON.stringify(this.config, null, 2);
+    syncFs.write(path, json);
+  },
+  reportError: function(error, options) {
+    if (options == null) {
+      options = {};
+    }
+    assertType(this.name, String);
+    assertType(error, Error.Kind);
+    if (isType(options.warn, Array)) {
+      if (inArray(options.warn, error.message)) {
+        log.moat(1);
+        log.yellow("WARN: ");
+        log.white(this.name);
+        log.moat(0);
+        log.gray.dim(error.message);
+        log.moat(1);
+        if (typeof error["catch"] === "function") {
+          error["catch"]();
+        }
+        return;
+      }
+    }
+    if (isType(options.quiet, Array)) {
+      if (inArray(options.quiet, error.message)) {
+        if (typeof error["catch"] === "function") {
+          error["catch"]();
+        }
+        return;
+      }
+    }
+    log.moat(1);
+    log.red("ERROR: ");
+    log.white(this.name);
+    log.moat(0);
+    log.gray.dim(error.stack);
+    log.moat(1);
+  }
+});
+
+type.defineStatics({
+  _loaders: Object.create(null),
+  _plugins: [],
+  resolvePath: function(modulePath) {
+    if (modulePath[0] === ".") {
+      modulePath = Path.resolve(process.cwd(), modulePath);
+    } else if (modulePath[0] !== "/") {
+      modulePath = lotus.path + "/" + modulePath;
+    }
+    return modulePath;
+  },
+  forFile: function(path) {
+    var name;
+    path = Path.relative(lotus.path, path);
+    name = path.slice(0, path.indexOf("/"));
+    return Module.cache[name];
+  },
+  crawl: function(path) {
+    var children, mods;
+    assertType(path, String);
+    assert(Path.isAbsolute(path), "Expected an absolute path!");
+    assert(syncFs.isDir(path), "Expected an existing directory!");
+    mods = SortedArray([], function(a, b) {
+      a = a.name.toLowerCase();
+      b = b.name.toLowerCase();
+      if (a > b) {
+        return 1;
+      } else {
+        return -1;
+      }
+    });
+    children = syncFs.readDir(path);
+    sync.each(children, function(moduleName) {
+      var error, modulePath;
+      modulePath = path + "/" + moduleName;
+      if (!syncFs.isDir(modulePath)) {
+        return;
+      }
+      if (!syncFs.isFile(modulePath + "/package.json")) {
+        return;
+      }
+      if (Module.cache[moduleName]) {
+        return;
+      }
+      try {
+        return mods.insert(Module(moduleName, modulePath));
+      } catch (error1) {
+        error = error1;
+        return Module.reportError(moduleName, error, errorConfig.crawl);
+      }
+    });
+    return mods.array;
+  },
+  addLoader: function(name, loader) {
+    assert(!this._loaders[name], "Loader named '" + name + "' already exists!");
+    this._loaders[name] = loader;
+  },
+  addLoaders: function(loaders) {
+    var loader, name;
+    assertType(loaders, Object);
+    for (name in loaders) {
+      loader = loaders[name];
+      this.addLoader(name, loader);
+    }
+  },
+  addPlugin: function(plugin) {
+    var index;
+    assertType(plugin, String);
+    index = this._plugins.indexOf(plugin);
+    assert(index < 0, "Plugin has already been added!");
+    this._plugins.push(plugin);
+  },
+  reportError: function(name, error, options) {
+    return Module.prototype.reportError.call({
+      name: name
+    }, error, options);
+  }
+});
+
+type.addMixins(lotus._moduleMixins);
+
+module.exports = Module = type.build();
+
+Module.addLoaders({
+  config: function() {
+    var error, path;
+    path = this.path + "/package.json";
+    if (!syncFs.isFile(path)) {
+      error = Error("'package.json' could not be found!");
+      return Q.reject(error);
+    }
+    return asyncFs.read(path).then((function(_this) {
+      return function(json) {
+        var dest, ref, specDest;
+        _this.config = JSON.parse(json);
+        if (!isType(_this.config.lotus, Object)) {
+          return;
+        }
+        ref = _this.config.lotus, dest = ref.dest, specDest = ref.specDest;
+        if (isType(dest, String)) {
+          assert(dest[0] !== "/", "'config.lotus.dest' must be a relative path");
+          _this.dest = Path.resolve(_this.path, dest);
+        }
+        if (isType(specDest, String)) {
+          assert(dest[0] !== "/", "'config.lotus.specDest' must be a relative path");
+          return _this.specDest = Path.resolve(_this.path, specDest);
+        }
+      };
+    })(this));
+  },
+  plugins: function() {
+    var Plugin, config, i, len, name, plugins, ref, tracer;
+    config = this.config.lotus;
+    if (!isType(config, Object)) {
+      return;
+    }
+    plugins = [].concat(config.plugins);
+    if (Module._plugins.length) {
+      ref = Module._plugins;
+      for (i = 0, len = ref.length; i < len; i++) {
+        name = ref[i];
+        if (0 <= plugins.indexOf(name)) {
+          continue;
+        }
+        plugins.push(name);
+      }
+    }
+    Plugin = lotus.Plugin;
+    tracer = Tracer("Plugin.load()");
+    return Plugin.load(plugins, (function(_this) {
+      return function(plugin, pluginsLoading) {
+        return plugin.load().then(function() {
+          var promises;
+          promises = [];
+          sync.each(plugin.globalDependencies, function(depName) {
+            return assert(Plugin._loadedGlobals[depName], {
+              depName: depName,
+              plugin: plugin,
+              stack: tracer(),
+              reason: "Missing global plugin dependency!"
+            });
+          });
+          sync.each(plugin.dependencies, function(depName) {
+            var deferred;
+            deferred = pluginsLoading[depName];
+            assert(deferred, {
+              depName: depName,
+              plugin: plugin,
+              stack: tracer(),
+              reason: "Missing local plugin dependency!"
+            });
+            return promises.push(deferred.promise);
+          });
+          return Q.all(promises);
+        }).then(function() {
+          return plugin.initModule(_this, config[plugin.name] || {});
+        }).fail(function(error) {
+          log.moat(1);
+          log.red("Plugin error: ");
+          log.white(plugin.name);
+          log.moat(0);
+          log.gray.dim(error.stack);
+          log.moat(1);
+          return process.exit();
+        });
+      };
+    })(this));
+  }
+});
+
+errorConfig = {
+  crawl: {
+    quiet: ["Module path must be a directory!", "Module with that name already exists!", "Module ignored by global config file!"]
+  }
+};
+
+//# sourceMappingURL=../../map/src/Module.map

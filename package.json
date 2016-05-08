@@ -1,34 +1,32 @@
 {
   "name": "lotus",
-  "version": "2.0.0",
+  "version": "3.0.0",
+  "main": "js/src/index",
   "bin": {
     "lotus": "./bin/lotus"
   },
   "dependencies": {
     "Type": "aleclarson/Type#1.0.0",
-    "async": "aleclarson/async#1.0.0",
-    "chokidar": "aleclarson/chokidar",
-    "coffee-script": "aleclarson/coffee-script#1.9.3",
-    "combine": "aleclarson/combine#1.0.0",
     "define": "aleclarson/define#1.0.0",
-    "exit": "aleclarson/exit#1.0.0",
-    "finder": "aleclarson/finder#1.0.1",
-    "has": "aleclarson/has#1.0.0",
-    "in-array": "^0.1.0",
     "io": "aleclarson/io#1.0.0",
     "key-bindings": "aleclarson/key-bindings#1.0.0",
-    "keymirror": "aleclarson/keymirror#1.0.0",
     "log": "aleclarson/log#1.0.0",
     "lotus-require": "aleclarson/lotus-require#1.0.0",
-    "micromatch": "^2.1.6",
     "minimist": "~0.0.8",
-    "node-paths": "aleclarson/node-paths#0.0.1",
-    "plural": "^0.1.6",
     "q": "aleclarson/q#1.0.0",
     "repl": "aleclarson/repl#1.0.0",
-    "semver": "^4.3.4",
     "sorted-array": "aleclarson/sorted-array#2.0.0",
-    "type-utils": "aleclarson/type-utils#1.0.0"
+    "type-utils": "aleclarson/type-utils#1.0.0",
+    "isDev": "aleclarson/isDev#1.0.0",
+    "failure": "aleclarson/failure#1.0.0",
+    "lazy-var": "aleclarson/lazy-var#2.0.0",
+    "reactive-var": "aleclarson/reactive-var#2.0.0",
+    "prompt": "aleclarson/prompt#1.0.0",
+    "sync": "aleclarson/sync#1.0.0",
+    "tracer": "aleclarson/tracer#1.0.0",
+    "globby": "aleclarson/globby#4.0.0",
+    "steal": "aleclarson/steal#1.0.0",
+    "in-array": "aleclarson/in-array#1.0.0"
   },
   "lotus": {
     "plugins": [

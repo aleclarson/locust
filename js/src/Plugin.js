@@ -1,10 +1,18 @@
-var KeyMirror, Plugin, RESERVED_NAMES, Type, inArray, type;
+var Plugin, Q, RESERVED_NAMES, Tracer, Type, assertType, define, steal, sync, type;
 
-KeyMirror = require("keymirror");
+assertType = require("type-utils").assertType;
 
-inArray = require("in-array");
+Tracer = require("tracer");
+
+define = require("define");
+
+steal = require("steal");
+
+sync = require("sync");
 
 Type = require("Type");
+
+Q = require("q");
 
 RESERVED_NAMES = {
   plugins: true
@@ -21,106 +29,179 @@ type.returnCached(function(name) {
   return name;
 });
 
-type.defineStatics({
-  commands: Object.create(null),
-  injectedPlugins: [],
-  inject: function(name) {
-    var plugin;
-    assertType(name, String);
-    if (inArray(Plugin.injectedPlugins, name)) {
-      return;
-    }
-    plugin = Plugin(name);
-    plugin.load();
-    Plugin.injectedPlugins.push(name);
-  }
-});
-
 type.defineValues({
   name: function(name) {
     return name;
   },
-  isLoading: false,
-  _exports: null,
-  _initModule: null
+  _loading: null
 });
 
 type.defineProperties({
+  isLoading: {
+    get: function() {
+      return this._loading !== null;
+    }
+  },
   isLoaded: {
     get: function() {
-      return this._exports !== null;
+      return Q.isFulfilled(this._loading);
+    }
+  },
+  dependencies: {
+    get: function() {
+      var dependencies;
+      this._assertLoaded();
+      dependencies = this._loading.inspect().value.dependencies;
+      if (!isType(dependencies, Array)) {
+        return [];
+      }
+      return dependencies;
+    }
+  },
+  globalDependencies: {
+    get: function() {
+      var globalDependencies;
+      this._assertLoaded();
+      globalDependencies = this._loading.inspect().value.globalDependencies;
+      if (!isType(globalDependencies, Array)) {
+        return [];
+      }
+      return globalDependencies;
+    }
+  },
+  _initModule: {
+    lazy: function() {
+      var initModule;
+      initModule = this._callHook("initModule");
+      if (initModule) {
+        assert(isType(initModule, Function), {
+          plugin: this,
+          reason: "Plugins must return a second function when hooking into 'initModule'!"
+        });
+        return initModule;
+      }
+      return emptyFunction;
     }
   }
 });
 
 type.defineMethods({
   load: function() {
-    var context, initPlugin;
-    if (this.isLoaded || this.isLoading) {
-      return;
+    if (!Q.isRejected(this._loading)) {
+      return this._loading;
     }
-    this.isLoading = true;
-    initPlugin = module.optional(lotus.path + "/" + this.name, (function(_this) {
-      return function(error) {
-        if (error.code === "REQUIRE_FAILED") {
-          error.message = "Cannot find plugin '" + _this.name + "'.";
+    return this._loading = Q["try"]((function(_this) {
+      return function() {
+        var plugin;
+        if (!lotus.exists(_this.name)) {
+          throw Error("Cannot find plugin: '" + _this.name + "'");
         }
-        throw error;
+        plugin = require(_this.name);
+        assert(isType(plugin, Object), {
+          name: _this.name,
+          plugin: plugin,
+          reason: "Plugins must export an object!"
+        });
+        return plugin;
       };
     })(this));
-    assert(isType(initPlugin, Function), {
-      name: this.name,
-      reason: "Plugin failed to export a Function!"
-    });
-    context = {
-      commands: Plugin.commands,
-      injectPlugin: Plugin.inject
-    };
-    this._exports = initPlugin.call(context);
-    this.isLoading = false;
   },
-  initModule: function(module, options) {
-    var initModule;
-    this.load();
-    if (!this.isLoaded) {
-      log.moat(1);
-      log.yellow("Plugin warning: ");
-      log.white(this.name);
-      log.gray.dim(" for module ");
-      log.cyan(module.name);
-      log.moat(0);
-      log.gray.dim("'plugin.isLoaded' must be true!");
-      log.moat(1);
+  initCommands: function(commands) {
+    var fn, key, newCommands;
+    newCommands = this._callHook("initCommands");
+    if (!newCommands) {
       return;
     }
-    if (!this._initModule) {
-      if (!isType(this._exports.initModule, Function)) {
-        log.moat(1);
-        log.yellow("Plugin warning: ");
-        log.white(this.name);
-        log.gray.dim(" for module ");
-        log.cyan(module.name);
-        log.moat(0);
-        log.gray.dim("'plugin.initModule' must be a Function!");
-        log.moat(1);
-        return;
-      }
-      initModule = this._exports.initModule();
-      if (!isType(initModule, Function)) {
-        log.moat(1);
-        log.yellow("Plugin warning: ");
-        log.white(this.name);
-        log.gray.dim(" for module ");
-        log.cyan(module.name);
-        log.moat(0);
-        log.gray.dim("'plugin.initModule' must return a Function!");
-        log.moat(1);
-        return;
-      }
-      this._initModule = initModule;
+    assertType(newCommands, Object);
+    for (key in newCommands) {
+      fn = newCommands[key];
+      assertType(fn, Function);
+      commands[key] = fn;
     }
-    return this._initModule(module, options);
+  },
+  initModule: function(mod, options) {
+    return this._initModule(mod, options);
+  },
+  initModuleType: function(type) {
+    var initType;
+    initType = this._callHook("initModuleType");
+    if (!initType) {
+      return;
+    }
+    assertType(initType, Function);
+    lotus._moduleMixins.push(initType);
+  },
+  initFileType: function(type) {
+    var initType;
+    initType = this._callHook("initFileType");
+    if (!initType) {
+      return;
+    }
+    assertType(initType, Function);
+    lotus._fileMixins.push(initType);
+  },
+  _assertLoaded: function() {
+    return assert(this.isLoaded, {
+      plugin: this,
+      reason: "Must call 'plugin.load' first!"
+    });
+  },
+  _callHook: function(name, context, args) {
+    var hook, loaded;
+    this._assertLoaded();
+    loaded = this._loading.inspect().value;
+    if (isType(loaded[name], Function)) {
+      hook = steal(loaded, name);
+      return hook.call(context, args);
+    }
+    return null;
   }
+});
+
+type.defineStatics({
+  _loadedGlobals: Object.create(null),
+  load: function(plugins, iterator) {
+    var pluginsLoading, tracer;
+    assertType(plugins, Array);
+    assertType(iterator, Function);
+    tracer = Tracer("Plugin.load()");
+    pluginsLoading = Object.create(null);
+    plugins = sync.map(plugins, function(plugin) {
+      if (isType(plugin, String)) {
+        plugin = Plugin(plugin);
+      }
+      assertType(plugin, Plugin);
+      pluginsLoading[plugin.name] = Q.defer();
+      return plugin;
+    });
+    return Q.all(sync.map(plugins, function(plugin) {
+      return Q["try"](function() {
+        var loading;
+        loading = iterator(plugin, pluginsLoading);
+        assert(plugin._loading, "Must call 'plugin.load' in the iterator!");
+        return loading;
+      }).then(function(result) {
+        pluginsLoading[plugin.name].fulfill(result);
+        return result;
+      }).fail(function(error) {
+        if (error.plugin) {
+          return;
+        }
+        error.plugin = plugin;
+        pluginsLoading[plugin.name].reject(error);
+        throw error;
+      });
+    }));
+  }
+});
+
+type.didBuild(function() {
+  define(lotus, {
+    _moduleMixins: [],
+    _fileMixins: []
+  });
+  assertType(lotus._moduleMixins, Array);
+  return assertType(lotus._fileMixins, Array);
 });
 
 module.exports = Plugin = type.build();

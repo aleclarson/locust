@@ -1,7 +1,12 @@
 
-KeyMirror = require "keymirror"
-inArray = require "in-array"
+{ assertType } = require "type-utils"
+
+Tracer = require "tracer"
+define = require "define"
+steal = require "steal"
+sync = require "sync"
 Type = require "Type"
+Q = require "q"
 
 RESERVED_NAMES = { plugins: yes }
 
@@ -14,100 +19,141 @@ type.returnCached (name) ->
   assert not RESERVED_NAMES[name], "A plugin cannot be named '#{name}'!"
   return name
 
-type.defineStatics
-
-  commands: Object.create null
-
-  injectedPlugins: []
-
-  inject: (name) ->
-    assertType name, String
-    return if inArray Plugin.injectedPlugins, name
-    plugin = Plugin name
-    plugin.load()
-    Plugin.injectedPlugins.push name
-    return
-
 type.defineValues
 
   name: (name) -> name
 
-  isLoading: no
-
-  _exports: null
-
-  _initModule: null
+  _loading: null
 
 type.defineProperties
 
+  isLoading: get: ->
+    @_loading isnt null
+
   isLoaded: get: ->
-    @_exports isnt null
+    Q.isFulfilled @_loading
+
+  dependencies: get: ->
+    @_assertLoaded()
+    { dependencies } = @_loading.inspect().value
+    return [] unless isType dependencies, Array
+    return dependencies
+
+  globalDependencies: get: ->
+    @_assertLoaded()
+    { globalDependencies } = @_loading.inspect().value
+    return [] unless isType globalDependencies, Array
+    return globalDependencies
+
+  _initModule: lazy: ->
+    initModule = @_callHook "initModule"
+    if initModule
+      assert isType(initModule, Function), { plugin: this, reason: "Plugins must return a second function when hooking into 'initModule'!" }
+      return initModule
+    return emptyFunction
 
 type.defineMethods
 
   load: ->
 
-    return if @isLoaded or @isLoading
-    @isLoading = yes
+    unless Q.isRejected @_loading
+      return @_loading
 
-    # TODO: Check 'node_modules' before using $LOTUS_PATH.
-    #       Check global 'node_modules' if not present in $LOTUS_PATH.
-    initPlugin = module.optional lotus.path + "/" + @name, (error) =>
-      error.message = "Cannot find plugin '#{@name}'." if error.code is "REQUIRE_FAILED"
-      throw error
+    @_loading = Q.try =>
 
-    assert (isType initPlugin, Function), { @name, reason: "Plugin failed to export a Function!" }
+      unless lotus.exists @name
+        throw Error "Cannot find plugin: '#{@name}'"
 
-    context =
-      commands: Plugin.commands
-      injectPlugin: Plugin.inject
+      plugin = require @name
+      assert isType(plugin, Object), { @name, plugin, reason: "Plugins must export an object!" }
+      return plugin
 
-    @_exports = initPlugin.call context
-    @isLoading = no
+  initCommands: (commands) ->
+
+    newCommands = @_callHook "initCommands"
+    return unless newCommands
+    assertType newCommands, Object
+
+    for key, fn of newCommands
+      assertType fn, Function
+      commands[key] = fn
     return
 
-  initModule: (module, options) ->
+  initModule: (mod, options) ->
+    @_initModule mod, options
 
-    @load()
+  initModuleType: (type) ->
+    initType = @_callHook "initModuleType"
+    return unless initType
+    assertType initType, Function
+    lotus._moduleMixins.push initType
+    return
 
-    unless @isLoaded
-      log.moat 1
-      log.yellow "Plugin warning: "
-      log.white @name
-      log.gray.dim " for module "
-      log.cyan module.name
-      log.moat 0
-      log.gray.dim "'plugin.isLoaded' must be true!"
-      log.moat 1
-      return
+  initFileType: (type) ->
+    initType = @_callHook "initFileType"
+    return unless initType
+    assertType initType, Function
+    lotus._fileMixins.push initType
+    return
 
-    unless @_initModule
-      unless isType @_exports.initModule, Function
-        log.moat 1
-        log.yellow "Plugin warning: "
-        log.white @name
-        log.gray.dim " for module "
-        log.cyan module.name
-        log.moat 0
-        log.gray.dim "'plugin.initModule' must be a Function!"
-        log.moat 1
-        return
+  _assertLoaded: ->
+    assert @isLoaded, { plugin: this, reason: "Must call 'plugin.load' first!" }
 
-      initModule = @_exports.initModule()
+  _callHook: (name, context, args) ->
+    @_assertLoaded()
+    loaded = @_loading.inspect().value
+    if isType loaded[name], Function
+      hook = steal loaded, name
+      return hook.call context, args
+    return null
 
-      unless isType initModule, Function
-        log.moat 1
-        log.yellow "Plugin warning: "
-        log.white @name
-        log.gray.dim " for module "
-        log.cyan module.name
-        log.moat 0
-        log.gray.dim "'plugin.initModule' must return a Function!"
-        log.moat 1
-        return
+type.defineStatics
 
-      @_initModule = initModule
+  _loadedGlobals: Object.create null
 
-    @_initModule module, options
+  load: (plugins, iterator) ->
+
+    assertType plugins, Array
+    assertType iterator, Function
+
+    tracer = Tracer "Plugin.load()"
+
+    pluginsLoading = Object.create null
+
+    plugins = sync.map plugins, (plugin) ->
+
+      plugin = Plugin plugin if isType plugin, String
+
+      assertType plugin, Plugin
+
+      pluginsLoading[plugin.name] = Q.defer()
+
+      return plugin
+
+    Q.all sync.map plugins, (plugin) ->
+
+      Q.try ->
+        loading = iterator plugin, pluginsLoading
+        assert plugin._loading, "Must call 'plugin.load' in the iterator!"
+        return loading
+
+      .then (result) ->
+        pluginsLoading[plugin.name].fulfill result
+        return result
+
+      .fail (error) ->
+        return if error.plugin
+        error.plugin = plugin
+        pluginsLoading[plugin.name].reject error
+        throw error
+
+type.didBuild ->
+
+  define lotus,
+    _moduleMixins: [] # Used by Plugin::initModuleType
+    _fileMixins: []   # Used by Plugin::initFileType
+
+  assertType lotus._moduleMixins, Array
+  assertType lotus._fileMixins, Array
 
 module.exports = Plugin = type.build()
