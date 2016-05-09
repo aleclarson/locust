@@ -9,7 +9,7 @@
     "Type": "aleclarson/Type#1.0.0",
     "define": "aleclarson/define#1.0.0",
     "io": "aleclarson/io#1.0.0",
-    "key-bindings": "aleclarson/key-bindings#1.0.0",
+    "key-bindings": "aleclarson/key-bindings#1.1.0",
     "log": "aleclarson/log#1.0.0",
     "lotus-require": "aleclarson/lotus-require#1.0.0",
     "minimist": "~0.0.8",
