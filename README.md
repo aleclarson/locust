@@ -3,8 +3,6 @@
 
 An experimental task runner written in CoffeeScript.
 
-**TODO:** Write tests!
-
 ### lotus
 
 The `lotus` object contains many utilities for using/managing local modules.
