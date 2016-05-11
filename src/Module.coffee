@@ -35,7 +35,7 @@ type.defineValues
 
   _loading: -> Object.create null
 
-  _crawling: null
+  _crawling: -> Object.create null
 
 type.defineProperties
 
@@ -61,12 +61,6 @@ type.initInstance ->
   assert @name[0..1] isnt "./", { mod: this, reason: "Module name cannot begin with './'!" }
   assert syncFs.isDir(@path), { mod: this, reason: "Module path must be a directory!" }
   assert not inArray(lotus.config.ignoredModules, @name), { mod: this, reason: "Module ignored by global config file!" }
-
-  dest = @path + "/js/src"
-  @dest = dest if syncFs.isDir dest
-
-  specDest = @path + "/js/spec"
-  @specDest = specDest if syncFs.isDir specDest
 
   if process.options.printModules
     log.moat 1
@@ -100,26 +94,60 @@ type.defineMethods
 
     return queue
 
-  # Find compiled source files that belong to this module.
+  # Find any files that belong to this module.
   # Use the 'lotus-watch' plugin and call 'Module.watch' if
   # you need to know about added/changed/deleted files.
-  crawl: ->
+  crawl: (pattern, options) ->
 
-    return @_crawling if @_crawling
+    if isType pattern, Object
+      options = pattern
+      pattern = null
 
-    assert @dest, { mod: this, reason: "Can only crawl module when its 'dest' is defined!" }
+    else unless isType options, Object
+      options = {}
 
-    @_crawling = globby [
-      @path + "/*.js"
-      @dest + "/**/*.js"
-    ]
+    # If no pattern is specified, find the
+    # compiled source files of this module.
+    unless pattern
+      pattern = []
+      pattern[0] = @path + "/*.js"
+      pattern[1] = @dest + "/**/*.js" if @dest
 
-    .then (paths) =>
+    if Array.isArray pattern
+      return Q.all sync.map pattern, (pattern) =>
+        @crawl pattern
+        .fail -> []
+      .then (filesByPattern) ->
+        paths = Object.create null
+        results = []
+        for files in filesByPattern
+          for file in files
+            continue if paths[file.path]
+            paths[file.path] = yes
+            results.push file
+        return results
 
-      for path in paths
-        lotus.File path, this
+    assertType pattern, String
 
-      return @files
+    if pattern[0] isnt "/"
+      pattern = Path.resolve @path, pattern
+
+    if options.force
+      # TODO: Handle cancellation properly.
+
+    else if @_crawling[pattern]
+      return @_crawling[pattern]
+
+    @_crawling[pattern] =
+
+      globby pattern
+
+      .then (paths) => # TODO: Handle cancellation properly.
+        sync.map paths, (path) =>
+          lotus.File path, this
+
+      .fail =>
+        delete @_crawling[pattern]
 
   saveConfig: ->
     return unless @config
@@ -245,17 +273,28 @@ Module.addLoaders
 
       @config = JSON.parse json
 
-      return unless isType @config.lotus, Object
-
-      { dest, specDest } = @config.lotus
+      if isType @config.lotus, Object
+        { dest, specDest } = @config.lotus
 
       if isType dest, String
         assert dest[0] isnt "/", "'config.lotus.dest' must be a relative path"
         @dest = Path.resolve @path, dest
 
+      else if isType @config.main, String
+        dest = lotus.resolve Path.join @name, @config.main
+        @dest = Path.dirname dest if dest
+
+      else
+        dest = @path + "/js/src"
+        @dest = dest if syncFs.isDir dest
+
       if isType specDest, String
         assert dest[0] isnt "/", "'config.lotus.specDest' must be a relative path"
         @specDest = Path.resolve @path, specDest
+
+      else
+        specDest = @path + "/js/spec"
+        @specDest = specDest if syncFs.isDir specDest
 
   plugins: ->
 

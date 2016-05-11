@@ -51,7 +51,9 @@ type.defineValues({
   _loading: function() {
     return Object.create(null);
   },
-  _crawling: null
+  _crawling: function() {
+    return Object.create(null);
+  }
 });
 
 type.defineProperties({
@@ -86,7 +88,6 @@ type.defineProperties({
 });
 
 type.initInstance(function() {
-  var dest, specDest;
   assert(this.name[0] !== "/", {
     mod: this,
     reason: "Module name cannot begin with '/'!"
@@ -103,14 +104,6 @@ type.initInstance(function() {
     mod: this,
     reason: "Module ignored by global config file!"
   });
-  dest = this.path + "/js/src";
-  if (syncFs.isDir(dest)) {
-    this.dest = dest;
-  }
-  specDest = this.path + "/js/spec";
-  if (syncFs.isDir(specDest)) {
-    this.specDest = specDest;
-  }
   if (process.options.printModules) {
     log.moat(1);
     log.green.dim("new Module(");
@@ -152,22 +145,63 @@ type.defineMethods({
     })(this));
     return queue;
   },
-  crawl: function() {
-    if (this._crawling) {
-      return this._crawling;
+  crawl: function(pattern, options) {
+    if (isType(pattern, Object)) {
+      options = pattern;
+      pattern = null;
+    } else if (!isType(options, Object)) {
+      options = {};
     }
-    assert(this.dest, {
-      mod: this,
-      reason: "Can only crawl module when its 'dest' is defined!"
-    });
-    return this._crawling = globby([this.path + "/*.js", this.dest + "/**/*.js"]).then((function(_this) {
-      return function(paths) {
-        var i, len, path;
-        for (i = 0, len = paths.length; i < len; i++) {
-          path = paths[i];
-          lotus.File(path, _this);
+    if (!pattern) {
+      pattern = [];
+      pattern[0] = this.path + "/*.js";
+      if (this.dest) {
+        pattern[1] = this.dest + "/**/*.js";
+      }
+    }
+    if (Array.isArray(pattern)) {
+      return Q.all(sync.map(pattern, (function(_this) {
+        return function(pattern) {
+          return _this.crawl(pattern).fail(function() {
+            return [];
+          });
+        };
+      })(this))).then(function(filesByPattern) {
+        var file, files, i, j, len, len1, paths, results;
+        paths = Object.create(null);
+        results = [];
+        for (i = 0, len = filesByPattern.length; i < len; i++) {
+          files = filesByPattern[i];
+          for (j = 0, len1 = files.length; j < len1; j++) {
+            file = files[j];
+            if (paths[file.path]) {
+              continue;
+            }
+            paths[file.path] = true;
+            results.push(file);
+          }
         }
-        return _this.files;
+        return results;
+      });
+    }
+    assertType(pattern, String);
+    if (pattern[0] !== "/") {
+      pattern = Path.resolve(this.path, pattern);
+    }
+    if (options.force) {
+
+    } else if (this._crawling[pattern]) {
+      return this._crawling[pattern];
+    }
+    return this._crawling[pattern] = globby(pattern).then((function(_this) {
+      return function(paths) {
+        return sync.map(paths, function(path) {
+          return lotus.File(path, _this);
+        });
+      };
+    })(this)).fail((function(_this) {
+      return function() {
+        return delete _this._crawling[pattern];
       };
     })(this));
   },
@@ -312,17 +346,31 @@ Module.addLoaders({
       return function(json) {
         var dest, ref, specDest;
         _this.config = JSON.parse(json);
-        if (!isType(_this.config.lotus, Object)) {
-          return;
+        if (isType(_this.config.lotus, Object)) {
+          ref = _this.config.lotus, dest = ref.dest, specDest = ref.specDest;
         }
-        ref = _this.config.lotus, dest = ref.dest, specDest = ref.specDest;
         if (isType(dest, String)) {
           assert(dest[0] !== "/", "'config.lotus.dest' must be a relative path");
           _this.dest = Path.resolve(_this.path, dest);
+        } else if (isType(_this.config.main, String)) {
+          dest = lotus.resolve(Path.join(_this.name, _this.config.main));
+          if (dest) {
+            _this.dest = Path.dirname(dest);
+          }
+        } else {
+          dest = _this.path + "/js/src";
+          if (syncFs.isDir(dest)) {
+            _this.dest = dest;
+          }
         }
         if (isType(specDest, String)) {
           assert(dest[0] !== "/", "'config.lotus.specDest' must be a relative path");
           return _this.specDest = Path.resolve(_this.path, specDest);
+        } else {
+          specDest = _this.path + "/js/spec";
+          if (syncFs.isDir(specDest)) {
+            return _this.specDest = specDest;
+          }
         }
       };
     })(this));

@@ -10,7 +10,8 @@ type = Type "Lotus_File"
 type.argumentTypes =
   path: String
 
-type.createArguments (args) ->
+# Initialize after 'argumentTypes' is validated.
+type.willBuild -> @initArguments (args) ->
 
   { Module } = lotus
 
@@ -19,8 +20,6 @@ type.createArguments (args) ->
   args[1] ?= Module.forFile args[0]
 
   assert isType(args[1], Module), { args, reason: "This file belongs to an unknown module!" }
-
-  return args
 
 type.returnExisting (path, mod) -> mod.files[path]
 
@@ -54,9 +53,30 @@ type.defineProperties
 
   dest: get: ->
 
-    if @type is "src"
-      destRoot = @module.dest
-    else destRoot = @module.specDest
+    # This file is a direct child of '@module.path'!
+    unless @dir.length
+      return null
+
+    destRoot =
+      if @type is "src" then @module.dest
+      else @module.specDest
+
+    destRootToDir = Path.relative destRoot, Path.join @module.path, @dir
+
+    # This file is already in 'destRoot'!
+    if destRootToDir[0] isnt "."
+      return null
+
+    unless destRoot
+      log.moat 1
+      log.yellow "Warning: "
+      log.white @path
+      log.moat 0
+      log.gray.dim "'file.dest' is not defined!"
+      log.moat 0
+      log.gray "{ type: #{@type} }"
+      log.moat 1
+      return null
 
     relPath = Path.relative destRoot, @path
 
@@ -69,10 +89,8 @@ type.defineProperties
     Path.join destRoot, relDir, @name + ".js"
 
   type: get: ->
-    return "src" if /[\/]*src[\/]*/.test @dir
     return "spec" if /[\/]*spec[\/]*/.test @dir
-    error = Error "Unknown file type!"
-    throwFailure error, { file: this }
+    return "src"
 
 type.defineMethods
 

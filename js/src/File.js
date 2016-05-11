@@ -16,21 +16,22 @@ type.argumentTypes = {
   path: String
 };
 
-type.createArguments(function(args) {
-  var Module;
-  Module = lotus.Module;
-  assert(Path.isAbsolute(args[0]), {
-    args: args,
-    reason: "Expected an absolute path!"
+type.willBuild(function() {
+  return this.initArguments(function(args) {
+    var Module;
+    Module = lotus.Module;
+    assert(Path.isAbsolute(args[0]), {
+      args: args,
+      reason: "Expected an absolute path!"
+    });
+    if (args[1] == null) {
+      args[1] = Module.forFile(args[0]);
+    }
+    return assert(isType(args[1], Module), {
+      args: args,
+      reason: "This file belongs to an unknown module!"
+    });
   });
-  if (args[1] == null) {
-    args[1] = Module.forFile(args[0]);
-  }
-  assert(isType(args[1], Module), {
-    args: args,
-    reason: "This file belongs to an unknown module!"
-  });
-  return args;
 });
 
 type.returnExisting(function(path, mod) {
@@ -72,11 +73,25 @@ type.defineValues({
 type.defineProperties({
   dest: {
     get: function() {
-      var destRoot, relDir, relPath, srcRoot;
-      if (this.type === "src") {
-        destRoot = this.module.dest;
-      } else {
-        destRoot = this.module.specDest;
+      var destRoot, destRootToDir, relDir, relPath, srcRoot;
+      if (!this.dir.length) {
+        return null;
+      }
+      destRoot = this.type === "src" ? this.module.dest : this.module.specDest;
+      destRootToDir = Path.relative(destRoot, Path.join(this.module.path, this.dir));
+      if (destRootToDir[0] !== ".") {
+        return null;
+      }
+      if (!destRoot) {
+        log.moat(1);
+        log.yellow("Warning: ");
+        log.white(this.path);
+        log.moat(0);
+        log.gray.dim("'file.dest' is not defined!");
+        log.moat(0);
+        log.gray("{ type: " + this.type + " }");
+        log.moat(1);
+        return null;
       }
       relPath = Path.relative(destRoot, this.path);
       if (relPath[1] !== ".") {
@@ -89,17 +104,10 @@ type.defineProperties({
   },
   type: {
     get: function() {
-      var error;
-      if (/[\/]*src[\/]*/.test(this.dir)) {
-        return "src";
-      }
       if (/[\/]*spec[\/]*/.test(this.dir)) {
         return "spec";
       }
-      error = Error("Unknown file type!");
-      return throwFailure(error, {
-        file: this
-      });
+      return "src";
     }
   }
 });
