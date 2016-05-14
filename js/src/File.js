@@ -1,8 +1,12 @@
-var Path, Q, Type, asyncFs, syncFs, type;
+var Path, Q, Type, assert, asyncFs, isType, syncFs, type;
 
 asyncFs = require("io/async");
 
 syncFs = require("io/sync");
+
+isType = require("isType");
+
+assert = require("assert");
 
 Path = require("path");
 

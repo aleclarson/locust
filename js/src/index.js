@@ -1,16 +1,22 @@
-var Plugin, Q, Tracer, assert, assertType, configTypes, define, isType, log, ref, sync, syncFs;
+var Plugin, Q, Tracer, assert, assertType, assertTypes, configTypes, define, isType, log, sync, syncFs;
 
 (global.lotus = require("lotus-require")).forceAll = true;
 
 require("isDev");
 
-ref = require("type-utils"), isType = ref.isType, assert = ref.assert, assertType = ref.assertType;
+assertTypes = require("assertTypes");
+
+assertType = require("assertType");
 
 Tracer = require("tracer");
 
 define = require("define");
 
 syncFs = require("io/sync");
+
+isType = require("isType");
+
+assert = require("assert");
 
 sync = require("sync");
 
@@ -82,7 +88,7 @@ define(lotus, {
   callMethod: function(methodName, config) {
     var files, method, modulePath;
     if (isDev) {
-      validateTypes(config, configTypes.callMethod, "config");
+      assertTypes(config, configTypes.callMethod, "config");
       assert(config.dir[0] === "/", "'config.dir' must be an absolute path!");
       assert(syncFs.isDir(config.dir), "'config.dir' must be an existing directory!");
     }

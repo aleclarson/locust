@@ -1,8 +1,9 @@
 
-{ assertType } = require "type-utils"
-
+assertType = require "assertType"
 Tracer = require "tracer"
+isType = require "isType"
 define = require "define"
+assert = require "assert"
 steal = require "steal"
 sync = require "sync"
 Type = require "Type"
@@ -120,19 +121,17 @@ type.defineStatics
 
     pluginsLoading = Object.create null
 
-    plugins = sync.map plugins, (plugin) ->
+    sync.reduce plugins, Q(), (promise, plugin) ->
 
-      plugin = Plugin plugin if isType plugin, String
+      if isType plugin, String
+        plugin = Plugin plugin
 
-      assertType plugin, Plugin
+      unless isType plugin, Plugin
+        return promise
 
       pluginsLoading[plugin.name] = Q.defer()
 
-      return plugin
-
-    Q.all sync.map plugins, (plugin) ->
-
-      Q.try ->
+      promise.then ->
         loading = iterator plugin, pluginsLoading
         assert plugin._loading, "Must call 'plugin.load' in the iterator!"
         return loading

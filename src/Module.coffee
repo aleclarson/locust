@@ -2,11 +2,16 @@
 # TODO: Fix crash when renaming a module directory.
 
 SortedArray = require "sorted-array"
+assertType = require "assertType"
+sortObject = require "sortObject"
+ErrorMap = require "ErrorMap"
 inArray = require "in-array"
 asyncFs = require "io/async"
 syncFs = require "io/sync"
 Tracer = require "tracer"
+isType = require "isType"
 globby = require "globby"
+assert = require "assert"
 sync = require "sync"
 Path = require "path"
 Type = require "Type"
@@ -114,9 +119,10 @@ type.defineMethods
       pattern[1] = @dest + "/**/*.js" if @dest
 
     if Array.isArray pattern
+
       return Q.all sync.map pattern, (pattern) =>
         @crawl pattern
-        .fail -> []
+
       .then (filesByPattern) ->
         paths = Object.create null
         results = []
@@ -143,46 +149,36 @@ type.defineMethods
       globby pattern
 
       .then (paths) => # TODO: Handle cancellation properly.
-        sync.map paths, (path) =>
-          lotus.File path, this
+        files = []
+        for path in paths
+          try files.push lotus.File path, this
+          catch error
+            errors.crawlFiles.resolve error, =>
+              log.yellow @name
+        return files
 
-      .fail =>
+      .fail (error) =>
         delete @_crawling[pattern]
+        throw error
 
   saveConfig: ->
+
     return unless @config
+
     path = @path + "/package.json"
-    json = JSON.stringify @config, null, 2
-    syncFs.write path, json
-    return
 
-  reportError: (error, options = {}) ->
+    { dependencies, devDependencies } = @config
 
-    assertType @name, String
-    assertType error, Error.Kind
+    if dependencies
+      @config.dependencies = sortObject dependencies, (a, b) ->
+        if a.key > b.key then 1 else -1
 
-    if isType options.warn, Array
-      if inArray options.warn, error.message
-        log.moat 1
-        log.yellow "WARN: "
-        log.white @name
-        log.moat 0
-        log.gray.dim error.message
-        log.moat 1
-        error.catch?()
-        return
+    if devDependencies
+      @config.devDependencies = sortObject devDependencies, (a, b) ->
+        if a.key > b.key then 1 else -1
 
-    if isType options.quiet, Array
-      if inArray options.quiet, error.message
-        error.catch?()
-        return
+    syncFs.write path, JSON.stringify @config, null, 2
 
-    log.moat 1
-    log.red "ERROR: "
-    log.white @name
-    log.moat 0
-    log.gray.dim error.stack
-    log.moat 1
     return
 
 type.defineStatics
@@ -228,7 +224,9 @@ type.defineStatics
       return unless syncFs.isFile modulePath + "/package.json"
       return if Module.cache[moduleName]
       try mods.insert Module moduleName, modulePath
-      catch error then Module.reportError moduleName, error, errorConfig.crawl
+      catch error
+        errors.crawlModules.resolve error, ->
+          log.yellow moduleName
 
     return mods.array
 
@@ -249,9 +247,6 @@ type.defineStatics
     assert index < 0, "Plugin has already been added!"
     @_plugins.push plugin
     return
-
-  reportError: (name, error, options) ->
-    Module::reportError.call { name }, error, options
 
 type.addMixins lotus._moduleMixins
 
@@ -341,9 +336,12 @@ Module.addLoaders
         log.moat 1
         process.exit()
 
-errorConfig =
+errors =
 
-  crawl:
+  crawlFiles: ErrorMap
+    quiet: []
+
+  crawlModules: ErrorMap
     quiet: [
       "Module path must be a directory!"
       "Module with that name already exists!"

@@ -1,6 +1,8 @@
 
 asyncFs = require "io/async"
 syncFs = require "io/sync"
+isType = require "isType"
+assert = require "assert"
 Path = require "path"
 Type = require "Type"
 Q = require "q"

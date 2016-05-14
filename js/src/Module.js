@@ -1,6 +1,12 @@
-var Module, Path, Q, SortedArray, Tracer, Type, asyncFs, errorConfig, globby, inArray, sync, syncFs, type;
+var ErrorMap, Module, Path, Q, SortedArray, Tracer, Type, assert, assertType, asyncFs, errors, globby, inArray, isType, sortObject, sync, syncFs, type;
 
 SortedArray = require("sorted-array");
+
+assertType = require("assertType");
+
+sortObject = require("sortObject");
+
+ErrorMap = require("ErrorMap");
 
 inArray = require("in-array");
 
@@ -10,7 +16,11 @@ syncFs = require("io/sync");
 
 Tracer = require("tracer");
 
+isType = require("isType");
+
 globby = require("globby");
+
+assert = require("assert");
 
 sync = require("sync");
 
@@ -162,9 +172,7 @@ type.defineMethods({
     if (Array.isArray(pattern)) {
       return Q.all(sync.map(pattern, (function(_this) {
         return function(pattern) {
-          return _this.crawl(pattern).fail(function() {
-            return [];
-          });
+          return _this.crawl(pattern);
         };
       })(this))).then(function(filesByPattern) {
         var file, files, i, j, len, len1, paths, results;
@@ -195,59 +203,54 @@ type.defineMethods({
     }
     return this._crawling[pattern] = globby(pattern).then((function(_this) {
       return function(paths) {
-        return sync.map(paths, function(path) {
-          return lotus.File(path, _this);
-        });
+        var error, files, i, len, path;
+        files = [];
+        for (i = 0, len = paths.length; i < len; i++) {
+          path = paths[i];
+          try {
+            files.push(lotus.File(path, _this));
+          } catch (error1) {
+            error = error1;
+            errors.crawlFiles.resolve(error, function() {
+              return log.yellow(_this.name);
+            });
+          }
+        }
+        return files;
       };
     })(this)).fail((function(_this) {
-      return function() {
-        return delete _this._crawling[pattern];
+      return function(error) {
+        delete _this._crawling[pattern];
+        throw error;
       };
     })(this));
   },
   saveConfig: function() {
-    var json, path;
+    var dependencies, devDependencies, path, ref;
     if (!this.config) {
       return;
     }
     path = this.path + "/package.json";
-    json = JSON.stringify(this.config, null, 2);
-    syncFs.write(path, json);
-  },
-  reportError: function(error, options) {
-    if (options == null) {
-      options = {};
-    }
-    assertType(this.name, String);
-    assertType(error, Error.Kind);
-    if (isType(options.warn, Array)) {
-      if (inArray(options.warn, error.message)) {
-        log.moat(1);
-        log.yellow("WARN: ");
-        log.white(this.name);
-        log.moat(0);
-        log.gray.dim(error.message);
-        log.moat(1);
-        if (typeof error["catch"] === "function") {
-          error["catch"]();
+    ref = this.config, dependencies = ref.dependencies, devDependencies = ref.devDependencies;
+    if (dependencies) {
+      this.config.dependencies = sortObject(dependencies, function(a, b) {
+        if (a.key > b.key) {
+          return 1;
+        } else {
+          return -1;
         }
-        return;
-      }
+      });
     }
-    if (isType(options.quiet, Array)) {
-      if (inArray(options.quiet, error.message)) {
-        if (typeof error["catch"] === "function") {
-          error["catch"]();
+    if (devDependencies) {
+      this.config.devDependencies = sortObject(devDependencies, function(a, b) {
+        if (a.key > b.key) {
+          return 1;
+        } else {
+          return -1;
         }
-        return;
-      }
+      });
     }
-    log.moat(1);
-    log.red("ERROR: ");
-    log.white(this.name);
-    log.moat(0);
-    log.gray.dim(error.stack);
-    log.moat(1);
+    syncFs.write(path, JSON.stringify(this.config, null, 2));
   }
 });
 
@@ -299,7 +302,9 @@ type.defineStatics({
         return mods.insert(Module(moduleName, modulePath));
       } catch (error1) {
         error = error1;
-        return Module.reportError(moduleName, error, errorConfig.crawl);
+        return errors.crawlModules.resolve(error, function() {
+          return log.yellow(moduleName);
+        });
       }
     });
     return mods.array;
@@ -322,11 +327,6 @@ type.defineStatics({
     index = this._plugins.indexOf(plugin);
     assert(index < 0, "Plugin has already been added!");
     this._plugins.push(plugin);
-  },
-  reportError: function(name, error, options) {
-    return Module.prototype.reportError.call({
-      name: name
-    }, error, options);
   }
 });
 
@@ -435,10 +435,13 @@ Module.addLoaders({
   }
 });
 
-errorConfig = {
-  crawl: {
+errors = {
+  crawlFiles: ErrorMap({
+    quiet: []
+  }),
+  crawlModules: ErrorMap({
     quiet: ["Module path must be a directory!", "Module with that name already exists!", "Module ignored by global config file!"]
-  }
+  })
 };
 
 //# sourceMappingURL=../../map/src/Module.map

@@ -4,11 +4,13 @@
 
 require "isDev"
 
-{ isType, assert, assertType } = require "type-utils"
-
+assertTypes = require "assertTypes"
+assertType = require "assertType"
 Tracer = require "tracer"
 define = require "define"
 syncFs = require "io/sync"
+isType = require "isType"
+assert = require "assert"
 sync = require "sync"
 log = require "log"
 Q = require "q"
@@ -69,7 +71,7 @@ define lotus,
   callMethod: (methodName, config) ->
 
     if isDev
-      validateTypes config, configTypes.callMethod, "config"
+      assertTypes config, configTypes.callMethod, "config"
       assert config.dir[0] is "/", "'config.dir' must be an absolute path!"
       assert syncFs.isDir(config.dir), "'config.dir' must be an existing directory!"
 

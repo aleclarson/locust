@@ -1,10 +1,14 @@
-var Plugin, Q, RESERVED_NAMES, Tracer, Type, assertType, define, steal, sync, type;
+var Plugin, Q, RESERVED_NAMES, Tracer, Type, assert, assertType, define, isType, steal, sync, type;
 
-assertType = require("type-utils").assertType;
+assertType = require("assertType");
 
 Tracer = require("tracer");
 
+isType = require("isType");
+
 define = require("define");
+
+assert = require("assert");
 
 steal = require("steal");
 
@@ -166,16 +170,15 @@ type.defineStatics({
     assertType(iterator, Function);
     tracer = Tracer("Plugin.load()");
     pluginsLoading = Object.create(null);
-    plugins = sync.map(plugins, function(plugin) {
+    return sync.reduce(plugins, Q(), function(promise, plugin) {
       if (isType(plugin, String)) {
         plugin = Plugin(plugin);
       }
-      assertType(plugin, Plugin);
+      if (!isType(plugin, Plugin)) {
+        return promise;
+      }
       pluginsLoading[plugin.name] = Q.defer();
-      return plugin;
-    });
-    return Q.all(sync.map(plugins, function(plugin) {
-      return Q["try"](function() {
+      return promise.then(function() {
         var loading;
         loading = iterator(plugin, pluginsLoading);
         assert(plugin._loading, "Must call 'plugin.load' in the iterator!");
@@ -191,7 +194,7 @@ type.defineStatics({
         pluginsLoading[plugin.name].reject(error);
         throw error;
       });
-    }));
+    });
   }
 });
 

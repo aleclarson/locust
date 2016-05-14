@@ -6,8 +6,6 @@ require("isDev");
 
 require("failure/global");
 
-require("type-utils/global");
-
 LazyVar = require("lazy-var");
 
 ReactiveVar = require("reactive-var");

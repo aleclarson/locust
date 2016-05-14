@@ -3,7 +3,6 @@ lotus = require "./index"
 
 require "isDev"
 require "failure/global"
-require "type-utils/global"
 
 # These classes inject themselves into the Property class.
 LazyVar = require "lazy-var"
