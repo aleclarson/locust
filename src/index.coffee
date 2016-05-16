@@ -1,6 +1,8 @@
 
-# Force all requires to first check for a $LOTUS_PATH counterpart.
-(global.lotus = require "lotus-require").forceAll =yes
+global.lotus = require "lotus-require"
+lotus.register {
+  exclude: [ "/node_modules/" ]
+}
 
 require "isDev"
 
@@ -40,7 +42,7 @@ define lotus,
 
   runCommand: (command, options = {}) ->
 
-    assert Q.isFulfilled(@_initializing), "Must call 'init' first!"
+    assert Q.isFulfilled(@_initializing), "Must call 'initialize' first!"
 
     unless isType command, String
       log.moat 1
@@ -94,7 +96,7 @@ define lotus,
 
     modulePath = config.dir + "/" + methodName
 
-    if lotus.exists modulePath
+    if lotus.isFile modulePath
 
       method = require modulePath
 

@@ -82,6 +82,9 @@ type.defineProperties({
         return null;
       }
       destRoot = this.type === "src" ? this.module.dest : this.module.specDest;
+      if (!destRoot) {
+        return null;
+      }
       destRootToDir = Path.relative(destRoot, Path.join(this.module.path, this.dir));
       if (destRootToDir[0] !== ".") {
         return null;
@@ -102,7 +105,9 @@ type.defineProperties({
         return this.path;
       }
       srcRoot = Path.join(this.module.path, "src");
-      relDir = Path.relative(srcRoot, Path.dirname(this.path));
+      if (this.path) {
+        relDir = Path.relative(srcRoot, Path.dirname(this.path));
+      }
       return Path.join(destRoot, relDir, this.name + ".js");
     }
   },

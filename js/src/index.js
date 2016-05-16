@@ -1,6 +1,10 @@
 var Plugin, Q, Tracer, assert, assertType, assertTypes, configTypes, define, isType, log, sync, syncFs;
 
-(global.lotus = require("lotus-require")).forceAll = true;
+global.lotus = require("lotus-require");
+
+lotus.register({
+  exclude: ["/node_modules/"]
+});
 
 require("isDev");
 
@@ -60,7 +64,7 @@ define(lotus, {
     if (options == null) {
       options = {};
     }
-    assert(Q.isFulfilled(this._initializing), "Must call 'init' first!");
+    assert(Q.isFulfilled(this._initializing), "Must call 'initialize' first!");
     if (!isType(command, String)) {
       log.moat(1);
       log.red("Error: ");
@@ -111,7 +115,7 @@ define(lotus, {
       process.exit();
     }
     modulePath = config.dir + "/" + methodName;
-    if (lotus.exists(modulePath)) {
+    if (lotus.isFile(modulePath)) {
       method = require(modulePath);
       if (isType(method, Function)) {
         return method.call(method, config.options || {});

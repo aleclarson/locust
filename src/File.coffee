@@ -63,6 +63,10 @@ type.defineProperties
       if @type is "src" then @module.dest
       else @module.specDest
 
+    # The output directory is not yet known!
+    unless destRoot
+      return null
+
     destRootToDir = Path.relative destRoot, Path.join @module.path, @dir
 
     # This file is already in 'destRoot'!
@@ -86,7 +90,9 @@ type.defineProperties
     return @path if relPath[1] isnt "."
 
     srcRoot = Path.join @module.path, "src" # TODO: Replace "src" with dynamic value.
-    relDir = Path.relative srcRoot, Path.dirname @path
+
+    if @path
+      relDir = Path.relative srcRoot, Path.dirname @path
 
     Path.join destRoot, relDir, @name + ".js"
 

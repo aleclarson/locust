@@ -21,7 +21,7 @@
     "key-bindings": "aleclarson/key-bindings#1.1.0",
     "lazy-var": "aleclarson/lazy-var#2.0.0",
     "log": "aleclarson/log#1.0.0",
-    "lotus-require": "aleclarson/lotus-require#2.0.0",
+    "lotus-require": "aleclarson/lotus-require#3.0.0",
     "minimist": "~0.0.8",
     "prompt": "aleclarson/prompt#1.0.0",
     "q": "aleclarson/q#1.0.0",

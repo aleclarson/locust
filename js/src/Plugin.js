@@ -97,7 +97,7 @@ type.defineMethods({
     return this._loading = Q["try"]((function(_this) {
       return function() {
         var plugin;
-        if (!lotus.exists(_this.name)) {
+        if (!lotus.isFile(_this.name)) {
           throw Error("Cannot find plugin: '" + _this.name + "'");
         }
         plugin = require(_this.name);

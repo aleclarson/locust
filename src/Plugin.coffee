@@ -62,7 +62,7 @@ type.defineMethods
 
     @_loading = Q.try =>
 
-      unless lotus.exists @name
+      unless lotus.isFile @name
         throw Error "Cannot find plugin: '#{@name}'"
 
       plugin = require @name
