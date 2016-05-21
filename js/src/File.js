@@ -1,4 +1,4 @@
-var Path, Q, Type, assert, asyncFs, isType, syncFs, type;
+var File, Path, Q, Type, assert, asyncFs, isType, log, syncFs, type;
 
 asyncFs = require("io/async");
 
@@ -11,6 +11,8 @@ assert = require("assert");
 Path = require("path");
 
 Type = require("Type");
+
+log = require("log");
 
 Q = require("q");
 
@@ -45,7 +47,7 @@ type.returnExisting(function(path, mod) {
 type.initInstance(function(path, mod) {
   var fileName;
   mod.files[path] = this;
-  if (process.options.printFiles) {
+  if (File._debug) {
     fileName = mod.name + "/" + Path.relative(mod.path, path);
     log.moat(1);
     log.green.dim("new File(");
@@ -136,8 +138,12 @@ type.defineMethods({
   }
 });
 
+type.defineStatics({
+  _debug: false
+});
+
 type.addMixins(lotus._fileMixins);
 
-module.exports = type.build();
+module.exports = File = type.build();
 
 //# sourceMappingURL=../../map/src/File.map

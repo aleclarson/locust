@@ -44,7 +44,10 @@ if (isDev) {
 
 define(lotus, {
   _initializing: null,
-  initialize: function() {
+  initialize: function(options) {
+    if (options == null) {
+      options = {};
+    }
     if (!Q.isRejected(this._initializing)) {
       return this._initializing;
     }
@@ -55,7 +58,7 @@ define(lotus, {
       };
     })(this)).then((function(_this) {
       return function() {
-        return _this._initClasses();
+        return _this._initClasses(options);
       };
     })(this));
   },
@@ -71,7 +74,7 @@ define(lotus, {
       log.white("Must provide a command!");
       log.moat(1);
       this._printCommandList();
-      process.exit();
+      return;
     }
     initCommand = this._commands[command];
     if (!isType(initCommand, Function)) {
@@ -80,7 +83,7 @@ define(lotus, {
       log.gray("Unrecognized command: ");
       log.white(command);
       log.moat(1);
-      process.exit();
+      return;
     }
     options.command = command;
     runCommand = initCommand(options);
@@ -112,27 +115,27 @@ define(lotus, {
       });
       log.popIndent();
       log.moat(1);
-      process.exit();
+      return;
     }
     modulePath = config.dir + "/" + methodName;
-    if (lotus.isFile(modulePath)) {
-      method = require(modulePath);
-      if (isType(method, Function)) {
-        return method.call(method, config.options || {});
-      } else {
-        log.moat(1);
-        log.white("Method must return function: ");
-        log.red("'" + modulePath + "'");
-        log.moat(1);
-        return process.exit();
-      }
-    } else {
+    if (!lotus.isFile(modulePath)) {
       log.moat(1);
       log.white("Unrecognized method: ");
       log.red("'" + (methodName || "") + "'");
       log.moat(1);
-      return process.exit();
+      return;
     }
+    method = require(modulePath);
+    if (!isType(method, Function)) {
+      log.moat(1);
+      log.white("Method must return function: ");
+      log.red("'" + modulePath + "'");
+      log.moat(1);
+      return;
+    }
+    return Q["try"](function() {
+      return method.call(method, config.options || {});
+    });
   },
   _initConfig: function() {
     var path;
@@ -192,24 +195,21 @@ define(lotus, {
       };
     })(this));
   },
-  _initClasses: function() {
+  _initClasses: function(options) {
+    var File, Module;
     if (lotus.Plugin) {
       return;
     }
+    Module = require("./Module");
+    Module._debug = options.debugModules;
+    File = require("./File");
+    File._debug = options.debugFiles;
     return define(lotus, {
       frozen: true
     }, {
       Plugin: Plugin,
-      Module: {
-        lazy: function() {
-          return require("./Module");
-        }
-      },
-      File: {
-        lazy: function() {
-          return require("./File");
-        }
-      }
+      Module: Module,
+      File: File
     });
   },
   _commands: Object.create(null),

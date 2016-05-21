@@ -2,19 +2,25 @@
 module.exports = ->
 
   setupGlobal()
-  setupBindings()
 
   minimist = require "minimist"
-  process.options = options = minimist process.argv.slice 2
+  options = minimist process.argv.slice 2
   command = options._.shift()
 
   log = require "log"
   log.indent = 2
   log.moat 1
 
+  setupBindings log
+
   lotus
-    .initialize()
+    .initialize options
     .then -> lotus.runCommand command, options
+    .then ->
+      log.moat 1
+      log.green "Finished without errors!"
+      log.moat 1
+      process.exit()
     .done()
 
 setupGlobal = ->
@@ -32,7 +38,7 @@ setupGlobal = ->
   global.prompt = require "prompt"
   global.repl = require "repl"
 
-setupBindings = ->
+setupBindings = (log) ->
 
   KeyBindings = require "key-bindings"
 

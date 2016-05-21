@@ -1,6 +1,8 @@
 
 # TODO: Fix crash when renaming a module directory.
 
+{ throwFailure } = require "failure"
+
 SortedArray = require "sorted-array"
 assertType = require "assertType"
 sortObject = require "sortObject"
@@ -15,6 +17,7 @@ assert = require "assert"
 sync = require "sync"
 Path = require "path"
 Type = require "Type"
+log = require "log"
 Q = require "q"
 
 type = Type "Lotus_Module"
@@ -67,7 +70,7 @@ type.initInstance ->
   assert syncFs.isDir(@path), { mod: this, reason: "Module path must be a directory!" }
   assert not inArray(lotus.config.ignoredModules, @name), { mod: this, reason: "Module ignored by global config file!" }
 
-  if process.options.printModules
+  if Module._debug
     log.moat 1
     log.green.dim "new Module("
     log.green "\"#{@name}\""
@@ -146,7 +149,7 @@ type.defineMethods
 
     @_crawling[pattern] =
 
-      globby pattern
+      globby pattern, { nodir: yes, ignore: "**/node_modules/**" }
 
       .then (paths) => # TODO: Handle cancellation properly.
         files = []
@@ -182,6 +185,8 @@ type.defineMethods
     return
 
 type.defineStatics
+
+  _debug: no
 
   _loaders: Object.create null
 

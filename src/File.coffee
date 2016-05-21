@@ -5,6 +5,7 @@ isType = require "isType"
 assert = require "assert"
 Path = require "path"
 Type = require "Type"
+log = require "log"
 Q = require "q"
 
 type = Type "Lotus_File"
@@ -29,7 +30,7 @@ type.initInstance (path, mod) ->
 
   mod.files[path] = this
 
-  if process.options.printFiles
+  if File._debug
     fileName = mod.name + "/" + Path.relative mod.path, path
     log.moat 1
     log.green.dim "new File("
@@ -113,6 +114,8 @@ type.defineMethods
       return @_reading.inspect().value
     return @_reading
 
+type.defineStatics { _debug: no }
+
 type.addMixins lotus._fileMixins
 
-module.exports = type.build()
+module.exports = File = type.build()

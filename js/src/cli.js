@@ -3,15 +3,20 @@ var setupBindings, setupGlobal;
 module.exports = function() {
   var command, log, minimist, options;
   setupGlobal();
-  setupBindings();
   minimist = require("minimist");
-  process.options = options = minimist(process.argv.slice(2));
+  options = minimist(process.argv.slice(2));
   command = options._.shift();
   log = require("log");
   log.indent = 2;
   log.moat(1);
-  return lotus.initialize().then(function() {
+  setupBindings(log);
+  return lotus.initialize(options).then(function() {
     return lotus.runCommand(command, options);
+  }).then(function() {
+    log.moat(1);
+    log.green("Finished without errors!");
+    log.moat(1);
+    return process.exit();
   }).done();
 };
 
@@ -24,7 +29,7 @@ setupGlobal = function() {
   return global.repl = require("repl");
 };
 
-setupBindings = function() {
+setupBindings = function(log) {
   var KeyBindings, keys;
   KeyBindings = require("key-bindings");
   keys = KeyBindings({

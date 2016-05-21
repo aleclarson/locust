@@ -1,4 +1,6 @@
-var ErrorMap, Module, Path, Q, SortedArray, Tracer, Type, assert, assertType, asyncFs, errors, globby, inArray, isType, sortObject, sync, syncFs, type;
+var ErrorMap, Module, Path, Q, SortedArray, Tracer, Type, assert, assertType, asyncFs, errors, globby, inArray, isType, log, sortObject, sync, syncFs, throwFailure, type;
+
+throwFailure = require("failure").throwFailure;
 
 SortedArray = require("sorted-array");
 
@@ -27,6 +29,8 @@ sync = require("sync");
 Path = require("path");
 
 Type = require("Type");
+
+log = require("log");
 
 Q = require("q");
 
@@ -114,7 +118,7 @@ type.initInstance(function() {
     mod: this,
     reason: "Module ignored by global config file!"
   });
-  if (process.options.printModules) {
+  if (Module._debug) {
     log.moat(1);
     log.green.dim("new Module(");
     log.green("\"" + this.name + "\"");
@@ -201,7 +205,10 @@ type.defineMethods({
     } else if (this._crawling[pattern]) {
       return this._crawling[pattern];
     }
-    return this._crawling[pattern] = globby(pattern).then((function(_this) {
+    return this._crawling[pattern] = globby(pattern, {
+      nodir: true,
+      ignore: "**/node_modules/**"
+    }).then((function(_this) {
       return function(paths) {
         var error, files, i, len, path;
         files = [];
@@ -255,6 +262,7 @@ type.defineMethods({
 });
 
 type.defineStatics({
+  _debug: false,
   _loaders: Object.create(null),
   _plugins: [],
   resolvePath: function(modulePath) {

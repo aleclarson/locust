@@ -32,13 +32,13 @@ define lotus,
 
   _initializing: null
 
-  initialize: ->
+  initialize: (options = {}) ->
     unless Q.isRejected @_initializing
       return @_initializing
     @_initConfig()
     @_initializing =
       Q.try => @_loadPlugins()
-      .then => @_initClasses()
+      .then => @_initClasses options
 
   runCommand: (command, options = {}) ->
 
@@ -50,7 +50,7 @@ define lotus,
       log.white "Must provide a command!"
       log.moat 1
       @_printCommandList()
-      process.exit()
+      return
 
     initCommand = @_commands[command]
 
@@ -60,7 +60,7 @@ define lotus,
       log.gray "Unrecognized command: "
       log.white command
       log.moat 1
-      process.exit()
+      return
 
     options.command = command
 
@@ -92,30 +92,28 @@ define lotus,
         log.yellow methodName
       log.popIndent()
       log.moat 1
-      process.exit()
+      return
 
     modulePath = config.dir + "/" + methodName
 
-    if lotus.isFile modulePath
-
-      method = require modulePath
-
-      if isType method, Function
-        method.call method, config.options or {}
-
-      else
-        log.moat 1
-        log.white "Method must return function: "
-        log.red "'#{modulePath}'"
-        log.moat 1
-        process.exit()
-
-    else
+    if not lotus.isFile modulePath
       log.moat 1
       log.white "Unrecognized method: "
       log.red "'" + (methodName or "") + "'"
       log.moat 1
-      process.exit()
+      return
+
+    method = require modulePath
+
+    if not isType method, Function
+      log.moat 1
+      log.white "Method must return function: "
+      log.red "'#{modulePath}'"
+      log.moat 1
+      return
+
+    return Q.try ->
+      method.call method, config.options or {}
 
   _initConfig: ->
     return if isType lotus.config, Object
@@ -163,13 +161,17 @@ define lotus,
         log.moat 1
         process.exit()
 
-  _initClasses: ->
+  _initClasses: (options) ->
+
     return if lotus.Plugin
-    define lotus, { frozen: yes }, {
-      Plugin
-      Module: lazy: -> require "./Module"
-      File: lazy: -> require "./File"
-    }
+
+    Module = require "./Module"
+    Module._debug = options.debugModules
+
+    File = require "./File"
+    File._debug = options.debugFiles
+
+    define lotus, { frozen: yes }, { Plugin, Module, File }
 
   _commands: Object.create null
 
