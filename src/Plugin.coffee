@@ -1,4 +1,5 @@
 
+emptyFunction = require "emptyFunction"
 assertType = require "assertType"
 Tracer = require "tracer"
 isType = require "isType"

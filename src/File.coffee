@@ -20,7 +20,7 @@ type.willBuild -> @initArguments (args) ->
 
   assert Path.isAbsolute(args[0]), { args, reason: "Expected an absolute path!" }
 
-  args[1] ?= Module.forFile args[0]
+  args[1] ?= Module.getParent args[0]
 
   assert isType(args[1], Module), { args, reason: "This file belongs to an unknown module!" }
 

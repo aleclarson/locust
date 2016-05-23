@@ -63,7 +63,7 @@ define(lotus, {
     })(this));
   },
   runCommand: function(command, options) {
-    var initCommand, runCommand;
+    var args, initCommand, runCommand;
     if (options == null) {
       options = {};
     }
@@ -76,6 +76,12 @@ define(lotus, {
       this._printCommandList();
       return;
     }
+    args = command.split(" ");
+    command = args.shift();
+    if (options._ == null) {
+      options._ = [];
+    }
+    options._ = options._.concat(args);
     initCommand = this._commands[command];
     if (!isType(initCommand, Function)) {
       this._printCommandList();

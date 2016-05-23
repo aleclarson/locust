@@ -156,7 +156,7 @@ type.defineMethods
         for path in paths
           try files.push lotus.File path, this
           catch error
-            errors.crawlFiles.resolve error, =>
+            errors.createFile.resolve error, =>
               log.yellow @name
         return files
 
@@ -202,7 +202,37 @@ type.defineStatics
 
     return modulePath
 
-  forFile: (path) ->
+  # Always returns a Module if the given directory
+  # is valid. Creates a new Module if one does not exist.
+  tryPath: (modulePath) ->
+
+    if not syncFs.isDir modulePath
+      return null
+
+    if not syncFs.isFile modulePath + "/package.json"
+      return null
+
+    moduleName = Path.relative lotus.path, modulePath
+
+    # The 'modulePath' must be a descendant of 'lotus.path'!
+    if moduleName[0] is "."
+      return null
+
+    # The 'moduleName' cannot have any slashes!
+    if 0 <= moduleName.indexOf "/"
+      return null
+
+    if Module.cache[moduleName]
+      return Module.cache[moduleName]
+
+    try return Module moduleName, modulePath
+    catch error
+      errors.createModule.resolve error, ->
+        log.yellow moduleName
+
+  # Takes the path of a file and returns
+  # its module if one exists.
+  getParent: (path) ->
     path = Path.relative lotus.path, path
     name = path.slice 0, path.indexOf "/"
     return Module.cache[name]
@@ -213,7 +243,8 @@ type.defineStatics
   # about added/changed/deleted modules.
   crawl: (path) ->
 
-    assertType path, String
+    # TODO: Support multiple $LOTUS_PATH
+    path ?= lotus.path
     assert Path.isAbsolute(path), "Expected an absolute path!"
     assert syncFs.isDir(path), "Expected an existing directory!"
 
@@ -224,15 +255,9 @@ type.defineStatics
 
     children = syncFs.readDir path
     sync.each children, (moduleName) ->
-      modulePath = path + "/" + moduleName
-      return unless syncFs.isDir modulePath
-      return unless syncFs.isFile modulePath + "/package.json"
-      return if Module.cache[moduleName]
-      try mods.insert Module moduleName, modulePath
-      catch error
-        errors.crawlModules.resolve error, ->
-          log.yellow moduleName
-
+      modulePath = lotus.path + "/" + moduleName
+      mod = Module.tryPath modulePath
+      mods.insert mod if mod
     return mods.array
 
   addLoader: (name, loader) ->
@@ -343,10 +368,10 @@ Module.addLoaders
 
 errors =
 
-  crawlFiles: ErrorMap
+  createFile: ErrorMap
     quiet: []
 
-  crawlModules: ErrorMap
+  createModule: ErrorMap
     quiet: [
       "Module path must be a directory!"
       "Module with that name already exists!"

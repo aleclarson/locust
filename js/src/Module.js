@@ -218,7 +218,7 @@ type.defineMethods({
             files.push(lotus.File(path, _this));
           } catch (error1) {
             error = error1;
-            errors.crawlFiles.resolve(error, function() {
+            errors.createFile.resolve(error, function() {
               return log.yellow(_this.name);
             });
           }
@@ -273,7 +273,34 @@ type.defineStatics({
     }
     return modulePath;
   },
-  forFile: function(path) {
+  tryPath: function(modulePath) {
+    var error, moduleName;
+    if (!syncFs.isDir(modulePath)) {
+      return null;
+    }
+    if (!syncFs.isFile(modulePath + "/package.json")) {
+      return null;
+    }
+    moduleName = Path.relative(lotus.path, modulePath);
+    if (moduleName[0] === ".") {
+      return null;
+    }
+    if (0 <= moduleName.indexOf("/")) {
+      return null;
+    }
+    if (Module.cache[moduleName]) {
+      return Module.cache[moduleName];
+    }
+    try {
+      return Module(moduleName, modulePath);
+    } catch (error1) {
+      error = error1;
+      return errors.createModule.resolve(error, function() {
+        return log.yellow(moduleName);
+      });
+    }
+  },
+  getParent: function(path) {
     var name;
     path = Path.relative(lotus.path, path);
     name = path.slice(0, path.indexOf("/"));
@@ -281,7 +308,9 @@ type.defineStatics({
   },
   crawl: function(path) {
     var children, mods;
-    assertType(path, String);
+    if (path == null) {
+      path = lotus.path;
+    }
     assert(Path.isAbsolute(path), "Expected an absolute path!");
     assert(syncFs.isDir(path), "Expected an existing directory!");
     mods = SortedArray([], function(a, b) {
@@ -295,24 +324,11 @@ type.defineStatics({
     });
     children = syncFs.readDir(path);
     sync.each(children, function(moduleName) {
-      var error, modulePath;
-      modulePath = path + "/" + moduleName;
-      if (!syncFs.isDir(modulePath)) {
-        return;
-      }
-      if (!syncFs.isFile(modulePath + "/package.json")) {
-        return;
-      }
-      if (Module.cache[moduleName]) {
-        return;
-      }
-      try {
-        return mods.insert(Module(moduleName, modulePath));
-      } catch (error1) {
-        error = error1;
-        return errors.crawlModules.resolve(error, function() {
-          return log.yellow(moduleName);
-        });
+      var mod, modulePath;
+      modulePath = lotus.path + "/" + moduleName;
+      mod = Module.tryPath(modulePath);
+      if (mod) {
+        return mods.insert(mod);
       }
     });
     return mods.array;
@@ -444,10 +460,10 @@ Module.addLoaders({
 });
 
 errors = {
-  crawlFiles: ErrorMap({
+  createFile: ErrorMap({
     quiet: []
   }),
-  crawlModules: ErrorMap({
+  createModule: ErrorMap({
     quiet: ["Module path must be a directory!", "Module with that name already exists!", "Module ignored by global config file!"]
   })
 };

@@ -5,7 +5,6 @@ module.exports = ->
 
   minimist = require "minimist"
   options = minimist process.argv.slice 2
-  command = options._.shift()
 
   log = require "log"
   log.indent = 2
@@ -13,14 +12,11 @@ module.exports = ->
 
   setupBindings log
 
+  command = options._.shift()
   lotus
     .initialize options
     .then -> lotus.runCommand command, options
-    .then ->
-      log.moat 1
-      log.green "Finished without errors!"
-      log.moat 1
-      process.exit()
+    .then -> process.exit()
     .done()
 
 setupGlobal = ->

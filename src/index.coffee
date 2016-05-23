@@ -44,13 +44,19 @@ define lotus,
 
     assert Q.isFulfilled(@_initializing), "Must call 'initialize' first!"
 
-    unless isType command, String
+    if not isType command, String
       log.moat 1
       log.red "Error: "
       log.white "Must provide a command!"
       log.moat 1
       @_printCommandList()
       return
+
+    args = command.split " "
+    command = args.shift()
+
+    options._ ?= []
+    options._ = options._.concat args
 
     initCommand = @_commands[command]
 

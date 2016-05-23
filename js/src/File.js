@@ -31,7 +31,7 @@ type.willBuild(function() {
       reason: "Expected an absolute path!"
     });
     if (args[1] == null) {
-      args[1] = Module.forFile(args[0]);
+      args[1] = Module.getParent(args[0]);
     }
     return assert(isType(args[1], Module), {
       args: args,

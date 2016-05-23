@@ -1,4 +1,6 @@
-var Plugin, Q, RESERVED_NAMES, Tracer, Type, assert, assertType, define, isType, steal, sync, type;
+var Plugin, Q, RESERVED_NAMES, Tracer, Type, assert, assertType, define, emptyFunction, isType, steal, sync, type;
+
+emptyFunction = require("emptyFunction");
 
 assertType = require("assertType");
 
