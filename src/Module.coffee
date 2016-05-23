@@ -182,6 +182,8 @@ type.defineMethods
 
     syncFs.write path, JSON.stringify @config, null, 2
 
+    config = JSON.stringify @config, null, 2
+    syncFs.write path, config + log.ln
     return
 
 type.defineStatics

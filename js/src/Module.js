@@ -233,7 +233,7 @@ type.defineMethods({
     })(this));
   },
   saveConfig: function() {
-    var dependencies, devDependencies, path, ref;
+    var config, dependencies, devDependencies, path, ref;
     if (!this.config) {
       return;
     }
@@ -258,6 +258,8 @@ type.defineMethods({
       });
     }
     syncFs.write(path, JSON.stringify(this.config, null, 2));
+    config = JSON.stringify(this.config, null, 2);
+    syncFs.write(path, config + log.ln);
   }
 });
 
