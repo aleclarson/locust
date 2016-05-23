@@ -1,4 +1,4 @@
-var ErrorMap, Module, Path, Q, SortedArray, Tracer, Type, assert, assertType, asyncFs, errors, globby, inArray, isType, log, sortObject, sync, syncFs, throwFailure, type;
+var ErrorMap, Module, Path, Q, SortedArray, Tracer, Type, assert, assertType, asyncFs, errors, globby, hasKeys, inArray, isType, log, sortObject, sync, syncFs, throwFailure, type;
 
 throwFailure = require("failure").throwFailure;
 
@@ -13,6 +13,8 @@ ErrorMap = require("ErrorMap");
 inArray = require("in-array");
 
 asyncFs = require("io/async");
+
+hasKeys = require("hasKeys");
 
 syncFs = require("io/sync");
 
@@ -239,7 +241,7 @@ type.defineMethods({
     }
     path = this.path + "/package.json";
     ref = this.config, dependencies = ref.dependencies, devDependencies = ref.devDependencies;
-    if (dependencies) {
+    if (hasKeys(dependencies)) {
       this.config.dependencies = sortObject(dependencies, function(a, b) {
         if (a.key > b.key) {
           return 1;
@@ -247,8 +249,10 @@ type.defineMethods({
           return -1;
         }
       });
+    } else {
+      delete this.config.dependencies;
     }
-    if (devDependencies) {
+    if (hasKeys(devDependencies)) {
       this.config.devDependencies = sortObject(devDependencies, function(a, b) {
         if (a.key > b.key) {
           return 1;
@@ -256,8 +260,9 @@ type.defineMethods({
           return -1;
         }
       });
+    } else {
+      delete this.config.devDependencies;
     }
-    syncFs.write(path, JSON.stringify(this.config, null, 2));
     config = JSON.stringify(this.config, null, 2);
     syncFs.write(path, config + log.ln);
   }

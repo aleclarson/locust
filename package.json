@@ -15,6 +15,7 @@
     "emptyFunction": "aleclarson/emptyFunction#1.0.0",
     "failure": "aleclarson/failure#1.0.0",
     "globby": "aleclarson/globby#4.0.0",
+    "hasKeys": "aleclarson/hasKeys#1.0.0",
     "in-array": "aleclarson/in-array#1.0.0",
     "io": "aleclarson/io#1.0.0",
     "isDev": "aleclarson/isDev#1.0.0",
@@ -50,3 +51,4 @@
     "MIT"
   ]
 }
+

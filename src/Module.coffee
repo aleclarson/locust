@@ -9,6 +9,7 @@ sortObject = require "sortObject"
 ErrorMap = require "ErrorMap"
 inArray = require "in-array"
 asyncFs = require "io/async"
+hasKeys = require "hasKeys"
 syncFs = require "io/sync"
 Tracer = require "tracer"
 isType = require "isType"
@@ -172,15 +173,13 @@ type.defineMethods
 
     { dependencies, devDependencies } = @config
 
-    if dependencies
-      @config.dependencies = sortObject dependencies, (a, b) ->
-        if a.key > b.key then 1 else -1
+    if hasKeys dependencies
+      @config.dependencies = sortObject dependencies, (a, b) -> if a.key > b.key then 1 else -1
+    else delete @config.dependencies
 
-    if devDependencies
-      @config.devDependencies = sortObject devDependencies, (a, b) ->
-        if a.key > b.key then 1 else -1
-
-    syncFs.write path, JSON.stringify @config, null, 2
+    if hasKeys devDependencies
+      @config.devDependencies = sortObject devDependencies, (a, b) -> if a.key > b.key then 1 else -1
+    else delete @config.devDependencies
 
     config = JSON.stringify @config, null, 2
     syncFs.write path, config + log.ln
