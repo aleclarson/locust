@@ -8,11 +8,12 @@ require "isDev"
 
 assertTypes = require "assertTypes"
 assertType = require "assertType"
+Property = require "Property"
 Tracer = require "tracer"
-define = require "define"
 syncFs = require "io/sync"
 isType = require "isType"
 assert = require "assert"
+define = require "define"
 sync = require "sync"
 log = require "log"
 Q = require "q"
@@ -177,7 +178,10 @@ define lotus,
     File = require "./File"
     File._debug = options.debugFiles
 
-    define lotus, { frozen: yes }, { Plugin, Module, File }
+    frozen = Property { frozen: yes }
+    for key, value of { Plugin, Module, File }
+      frozen.define lotus, key, value
+    return
 
   _commands: Object.create null
 

@@ -1,4 +1,4 @@
-var Plugin, Q, Tracer, assert, assertType, assertTypes, configTypes, define, isType, log, sync, syncFs;
+var Plugin, Property, Q, Tracer, assert, assertType, assertTypes, configTypes, define, isType, log, sync, syncFs;
 
 global.lotus = require("lotus-require");
 
@@ -12,15 +12,17 @@ assertTypes = require("assertTypes");
 
 assertType = require("assertType");
 
-Tracer = require("tracer");
+Property = require("Property");
 
-define = require("define");
+Tracer = require("tracer");
 
 syncFs = require("io/sync");
 
 isType = require("isType");
 
 assert = require("assert");
+
+define = require("define");
 
 sync = require("sync");
 
@@ -202,7 +204,7 @@ define(lotus, {
     })(this));
   },
   _initClasses: function(options) {
-    var File, Module;
+    var File, Module, frozen, key, ref, value;
     if (lotus.Plugin) {
       return;
     }
@@ -210,13 +212,18 @@ define(lotus, {
     Module._debug = options.debugModules;
     File = require("./File");
     File._debug = options.debugFiles;
-    return define(lotus, {
+    frozen = Property({
       frozen: true
-    }, {
+    });
+    ref = {
       Plugin: Plugin,
       Module: Module,
       File: File
-    });
+    };
+    for (key in ref) {
+      value = ref[key];
+      frozen.define(lotus, key, value);
+    }
   },
   _commands: Object.create(null),
   _printCommandList: function() {
