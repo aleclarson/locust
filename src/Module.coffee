@@ -7,6 +7,7 @@ SortedArray = require "sorted-array"
 assertType = require "assertType"
 sortObject = require "sortObject"
 ErrorMap = require "ErrorMap"
+Promise = require "Promise"
 inArray = require "in-array"
 asyncFs = require "io/async"
 hasKeys = require "hasKeys"
@@ -19,7 +20,6 @@ sync = require "sync"
 Path = require "path"
 Type = require "Type"
 log = require "log"
-Q = require "q"
 
 type = Type "Lotus_Module"
 
@@ -86,22 +86,16 @@ type.defineMethods
 
     tracer = Tracer "module.load()"
 
-    queue = Q()
+    return Promise.chain names, (name) =>
 
-    sync.each names, (name) =>
+      @_loading[name] ?= Promise.try =>
+        load = Module._loaders[name]
+        assert isType(load, Function), { mod: this, name, reason: "Invalid loader!" }
+        load.call this
 
-      queue = queue.then =>
-
-        @_loading[name] ?= Q.try =>
-          load = Module._loaders[name]
-          assert isType(load, Function), { mod: this, name, reason: "Invalid loader!" }
-          load.call this
-
-        .fail (error) =>
-          @_loading[name] = null
-          throwFailure error, { mod: this, name, stack: tracer() }
-
-    return queue
+      .fail (error) =>
+        @_loading[name] = null
+        throwFailure error, { mod: this, name, stack: tracer() }
 
   # Find any files that belong to this module.
   # Use the 'lotus-watch' plugin and call 'Module.watch' if
@@ -124,7 +118,7 @@ type.defineMethods
 
     if Array.isArray pattern
 
-      return Q.all sync.map pattern, (pattern) =>
+      return Promise.all sync.map pattern, (pattern) =>
         @crawl pattern
 
       .then (filesByPattern) ->
@@ -291,7 +285,7 @@ Module.addLoaders
 
     unless syncFs.isFile path
       error = Error "'package.json' could not be found!"
-      return Q.reject error
+      return Promise.reject error
 
     asyncFs.read path
 
@@ -307,8 +301,7 @@ Module.addLoaders
         @dest = Path.resolve @path, dest
 
       else if isType @config.main, String
-        dest = lotus.resolve Path.join @name, @config.main
-        @dest = Path.dirname dest if dest
+        @dest = Path.dirname Path.join @path, @config.main
 
       else
         dest = @path + "/js/src"
@@ -353,7 +346,7 @@ Module.addLoaders
           assert deferred, { depName, plugin, stack: tracer(), reason: "Missing local plugin dependency!" }
           promises.push deferred.promise
 
-        Q.all promises
+        Promise.all promises
 
       .then =>
         plugin.initModule this, config[plugin.name] or {}

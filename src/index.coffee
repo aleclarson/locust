@@ -9,6 +9,7 @@ require "isDev"
 assertTypes = require "assertTypes"
 assertType = require "assertType"
 Property = require "Property"
+Promise = require "Promise"
 Tracer = require "tracer"
 syncFs = require "io/sync"
 isType = require "isType"
@@ -16,7 +17,6 @@ assert = require "assert"
 define = require "define"
 sync = require "sync"
 log = require "log"
-Q = require "q"
 
 Plugin = require "./Plugin"
 
@@ -34,16 +34,16 @@ define lotus,
   _initializing: null
 
   initialize: (options = {}) ->
-    unless Q.isRejected @_initializing
+    unless Promise.isRejected @_initializing
       return @_initializing
     @_initConfig()
     @_initializing =
-      Q.try => @_loadPlugins()
+      Promise.try => @_loadPlugins()
       .then => @_initClasses options
 
   runCommand: (command, options = {}) ->
 
-    assert Q.isFulfilled(@_initializing), "Must call 'initialize' first!"
+    assert Promise.isFulfilled(@_initializing), "Must call 'initialize' first!"
 
     if not isType command, String
       log.moat 1
@@ -75,7 +75,7 @@ define lotus,
 
     assertType runCommand, Function
 
-    Q.try -> runCommand options
+    Promise.try -> runCommand options
 
   callMethod: (methodName, config) ->
 
@@ -119,7 +119,7 @@ define lotus,
       log.moat 1
       return
 
-    return Q.try ->
+    return Promise.try ->
       method.call method, config.options or {}
 
   _initConfig: ->
@@ -151,7 +151,7 @@ define lotus,
           assert deferred, { depName, plugin, stack: tracer(), reason: "Missing local plugin dependency!" }
           promises.push deferred.promise
 
-        Q.all promises
+        Promise.all promises
 
       .then =>
         plugin.initCommands @_commands

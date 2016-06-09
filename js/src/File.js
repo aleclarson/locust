@@ -1,4 +1,6 @@
-var File, Path, Q, Type, assert, asyncFs, isType, log, syncFs, type;
+var File, Path, Promise, Type, assert, asyncFs, isType, log, syncFs, type;
+
+Promise = require("Promise");
 
 asyncFs = require("io/async");
 
@@ -13,8 +15,6 @@ Path = require("path");
 Type = require("Type");
 
 log = require("log");
-
-Q = require("q");
 
 type = Type("Lotus_File");
 
@@ -129,7 +129,7 @@ type.defineMethods({
       options = {};
     }
     if (options.force || !this._reading) {
-      this._reading = options.sync ? Q.fulfill(syncFs.read(this.path)) : asyncFs.read(this.path);
+      this._reading = options.sync ? Promise(syncFs.read(this.path)) : asyncFs.read(this.path);
     }
     if (options.sync) {
       return this._reading.inspect().value;

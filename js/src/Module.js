@@ -1,4 +1,4 @@
-var ErrorMap, Module, Path, Q, SortedArray, Tracer, Type, assert, assertType, asyncFs, errors, globby, hasKeys, inArray, isType, log, sortObject, sync, syncFs, throwFailure, type;
+var ErrorMap, Module, Path, Promise, SortedArray, Tracer, Type, assert, assertType, asyncFs, errors, globby, hasKeys, inArray, isType, log, sortObject, sync, syncFs, throwFailure, type;
 
 throwFailure = require("failure").throwFailure;
 
@@ -9,6 +9,8 @@ assertType = require("assertType");
 sortObject = require("sortObject");
 
 ErrorMap = require("ErrorMap");
+
+Promise = require("Promise");
 
 inArray = require("in-array");
 
@@ -33,8 +35,6 @@ Path = require("path");
 Type = require("Type");
 
 log = require("log");
-
-Q = require("q");
 
 type = Type("Lotus_Module");
 
@@ -131,35 +131,31 @@ type.initInstance(function() {
 
 type.defineMethods({
   load: function(names) {
-    var queue, tracer;
+    var tracer;
     assertType(names, Array);
     tracer = Tracer("module.load()");
-    queue = Q();
-    sync.each(names, (function(_this) {
+    return Promise.chain(names, (function(_this) {
       return function(name) {
-        return queue = queue.then(function() {
-          var base;
-          return (base = _this._loading)[name] != null ? base[name] : base[name] = Q["try"](function() {
-            var load;
-            load = Module._loaders[name];
-            assert(isType(load, Function), {
-              mod: _this,
-              name: name,
-              reason: "Invalid loader!"
-            });
-            return load.call(_this);
-          }).fail(function(error) {
-            _this._loading[name] = null;
-            return throwFailure(error, {
-              mod: _this,
-              name: name,
-              stack: tracer()
-            });
+        var base;
+        return (base = _this._loading)[name] != null ? base[name] : base[name] = Promise["try"](function() {
+          var load;
+          load = Module._loaders[name];
+          assert(isType(load, Function), {
+            mod: _this,
+            name: name,
+            reason: "Invalid loader!"
+          });
+          return load.call(_this);
+        }).fail(function(error) {
+          _this._loading[name] = null;
+          return throwFailure(error, {
+            mod: _this,
+            name: name,
+            stack: tracer()
           });
         });
       };
     })(this));
-    return queue;
   },
   crawl: function(pattern, options) {
     if (isType(pattern, Object)) {
@@ -176,7 +172,7 @@ type.defineMethods({
       }
     }
     if (Array.isArray(pattern)) {
-      return Q.all(sync.map(pattern, (function(_this) {
+      return Promise.all(sync.map(pattern, (function(_this) {
         return function(pattern) {
           return _this.crawl(pattern);
         };
@@ -371,7 +367,7 @@ Module.addLoaders({
     path = this.path + "/package.json";
     if (!syncFs.isFile(path)) {
       error = Error("'package.json' could not be found!");
-      return Q.reject(error);
+      return Promise.reject(error);
     }
     return asyncFs.read(path).then((function(_this) {
       return function(json) {
@@ -384,10 +380,7 @@ Module.addLoaders({
           assert(dest[0] !== "/", "'config.lotus.dest' must be a relative path");
           _this.dest = Path.resolve(_this.path, dest);
         } else if (isType(_this.config.main, String)) {
-          dest = lotus.resolve(Path.join(_this.name, _this.config.main));
-          if (dest) {
-            _this.dest = Path.dirname(dest);
-          }
+          _this.dest = Path.dirname(Path.join(_this.path, _this.config.main));
         } else {
           dest = _this.path + "/js/src";
           if (syncFs.isDir(dest)) {
@@ -449,7 +442,7 @@ Module.addLoaders({
             });
             return promises.push(deferred.promise);
           });
-          return Q.all(promises);
+          return Promise.all(promises);
         }).then(function() {
           return plugin.initModule(_this, config[plugin.name] || {});
         }).fail(function(error) {

@@ -2,6 +2,7 @@
 module.exports = ->
 
   setupGlobal()
+  setupErrorHandlers()
 
   minimist = require "minimist"
   options = minimist process.argv.slice 2
@@ -17,7 +18,6 @@ module.exports = ->
     .initialize options
     .then -> lotus.runCommand command, options
     .then -> process.exit()
-    .done()
 
 setupGlobal = ->
 
@@ -33,6 +33,17 @@ setupGlobal = ->
 
   global.prompt = require "prompt"
   global.repl = require "repl"
+
+setupErrorHandlers = ->
+
+  Promise = require "Promise"
+
+  Promise._onUnhandledRejection = (error, promise) ->
+    console.log error.stack
+    repl.sync { error, promise }
+
+  process.on "uncaughtException", (error) ->
+    console.log error.stack
 
 setupBindings = (log) ->
 

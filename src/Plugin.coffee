@@ -1,6 +1,7 @@
 
 emptyFunction = require "emptyFunction"
 assertType = require "assertType"
+Promise = require "Promise"
 Tracer = require "tracer"
 isType = require "isType"
 define = require "define"
@@ -8,7 +9,6 @@ assert = require "assert"
 steal = require "steal"
 sync = require "sync"
 Type = require "Type"
-Q = require "q"
 
 RESERVED_NAMES = { plugins: yes }
 
@@ -33,7 +33,7 @@ type.defineProperties
     @_loading isnt null
 
   isLoaded: get: ->
-    Q.isFulfilled @_loading
+    Promise.isFulfilled @_loading
 
   dependencies: get: ->
     @_assertLoaded()
@@ -58,10 +58,10 @@ type.defineMethods
 
   load: ->
 
-    unless Q.isRejected @_loading
+    unless Promise.isRejected @_loading
       return @_loading
 
-    @_loading = Q.try =>
+    @_loading = Promise.try =>
 
       unless lotus.isFile @name
         throw Error "Cannot find plugin: '#{@name}'"
@@ -122,7 +122,7 @@ type.defineStatics
 
     pluginsLoading = Object.create null
 
-    sync.reduce plugins, Q(), (promise, plugin) ->
+    Promise.chain plugins, (plugin) ->
 
       if isType plugin, String
         plugin = Plugin plugin
@@ -130,15 +130,15 @@ type.defineStatics
       unless isType plugin, Plugin
         return promise
 
-      pluginsLoading[plugin.name] = Q.defer()
+      pluginsLoading[plugin.name] = Promise.defer()
 
-      promise.then ->
+      Promise.try ->
         loading = iterator plugin, pluginsLoading
         assert plugin._loading, "Must call 'plugin.load' in the iterator!"
         return loading
 
       .then (result) ->
-        pluginsLoading[plugin.name].fulfill result
+        pluginsLoading[plugin.name].resolve result
         return result
 
       .fail (error) ->

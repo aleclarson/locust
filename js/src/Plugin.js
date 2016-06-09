@@ -1,8 +1,10 @@
-var Plugin, Q, RESERVED_NAMES, Tracer, Type, assert, assertType, define, emptyFunction, isType, steal, sync, type;
+var Plugin, Promise, RESERVED_NAMES, Tracer, Type, assert, assertType, define, emptyFunction, isType, steal, sync, type;
 
 emptyFunction = require("emptyFunction");
 
 assertType = require("assertType");
+
+Promise = require("Promise");
 
 Tracer = require("tracer");
 
@@ -17,8 +19,6 @@ steal = require("steal");
 sync = require("sync");
 
 Type = require("Type");
-
-Q = require("q");
 
 RESERVED_NAMES = {
   plugins: true
@@ -50,7 +50,7 @@ type.defineProperties({
   },
   isLoaded: {
     get: function() {
-      return Q.isFulfilled(this._loading);
+      return Promise.isFulfilled(this._loading);
     }
   },
   dependencies: {
@@ -93,10 +93,10 @@ type.defineProperties({
 
 type.defineMethods({
   load: function() {
-    if (!Q.isRejected(this._loading)) {
+    if (!Promise.isRejected(this._loading)) {
       return this._loading;
     }
-    return this._loading = Q["try"]((function(_this) {
+    return this._loading = Promise["try"]((function(_this) {
       return function() {
         var plugin;
         if (!lotus.isFile(_this.name)) {
@@ -172,21 +172,21 @@ type.defineStatics({
     assertType(iterator, Function);
     tracer = Tracer("Plugin.load()");
     pluginsLoading = Object.create(null);
-    return sync.reduce(plugins, Q(), function(promise, plugin) {
+    return Promise.chain(plugins, function(plugin) {
       if (isType(plugin, String)) {
         plugin = Plugin(plugin);
       }
       if (!isType(plugin, Plugin)) {
         return promise;
       }
-      pluginsLoading[plugin.name] = Q.defer();
-      return promise.then(function() {
+      pluginsLoading[plugin.name] = Promise.defer();
+      return Promise["try"](function() {
         var loading;
         loading = iterator(plugin, pluginsLoading);
         assert(plugin._loading, "Must call 'plugin.load' in the iterator!");
         return loading;
       }).then(function(result) {
-        pluginsLoading[plugin.name].fulfill(result);
+        pluginsLoading[plugin.name].resolve(result);
         return result;
       }).fail(function(error) {
         if (error.plugin) {

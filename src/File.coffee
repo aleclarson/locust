@@ -1,4 +1,5 @@
 
+Promise = require "Promise"
 asyncFs = require "io/async"
 syncFs = require "io/sync"
 isType = require "isType"
@@ -6,7 +7,6 @@ assert = require "assert"
 Path = require "path"
 Type = require "Type"
 log = require "log"
-Q = require "q"
 
 type = Type "Lotus_File"
 
@@ -107,7 +107,7 @@ type.defineMethods
 
     if options.force or not @_reading
       @_reading = if options.sync
-        Q.fulfill syncFs.read @path
+        Promise syncFs.read @path
       else asyncFs.read @path
 
     if options.sync

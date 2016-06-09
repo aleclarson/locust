@@ -1,4 +1,4 @@
-var Plugin, Property, Q, Tracer, assert, assertType, assertTypes, configTypes, define, isType, log, sync, syncFs;
+var Plugin, Promise, Property, Tracer, assert, assertType, assertTypes, configTypes, define, isType, log, sync, syncFs;
 
 global.lotus = require("lotus-require");
 
@@ -14,6 +14,8 @@ assertType = require("assertType");
 
 Property = require("Property");
 
+Promise = require("Promise");
+
 Tracer = require("tracer");
 
 syncFs = require("io/sync");
@@ -27,8 +29,6 @@ define = require("define");
 sync = require("sync");
 
 log = require("log");
-
-Q = require("q");
 
 Plugin = require("./Plugin");
 
@@ -50,11 +50,11 @@ define(lotus, {
     if (options == null) {
       options = {};
     }
-    if (!Q.isRejected(this._initializing)) {
+    if (!Promise.isRejected(this._initializing)) {
       return this._initializing;
     }
     this._initConfig();
-    return this._initializing = Q["try"]((function(_this) {
+    return this._initializing = Promise["try"]((function(_this) {
       return function() {
         return _this._loadPlugins();
       };
@@ -69,7 +69,7 @@ define(lotus, {
     if (options == null) {
       options = {};
     }
-    assert(Q.isFulfilled(this._initializing), "Must call 'initialize' first!");
+    assert(Promise.isFulfilled(this._initializing), "Must call 'initialize' first!");
     if (!isType(command, String)) {
       log.moat(1);
       log.red("Error: ");
@@ -96,7 +96,7 @@ define(lotus, {
     options.command = command;
     runCommand = initCommand(options);
     assertType(runCommand, Function);
-    return Q["try"](function() {
+    return Promise["try"](function() {
       return runCommand(options);
     });
   },
@@ -141,7 +141,7 @@ define(lotus, {
       log.moat(1);
       return;
     }
-    return Q["try"](function() {
+    return Promise["try"](function() {
       return method.call(method, config.options || {});
     });
   },
@@ -185,7 +185,7 @@ define(lotus, {
             });
             return promises.push(deferred.promise);
           });
-          return Q.all(promises);
+          return Promise.all(promises);
         }).then(function() {
           plugin.initCommands(_this._commands);
           plugin.initModuleType();

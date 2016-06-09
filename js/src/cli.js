@@ -1,8 +1,9 @@
-var setupBindings, setupGlobal;
+var setupBindings, setupErrorHandlers, setupGlobal;
 
 module.exports = function() {
   var command, log, minimist, options;
   setupGlobal();
+  setupErrorHandlers();
   minimist = require("minimist");
   options = minimist(process.argv.slice(2));
   log = require("log");
@@ -14,7 +15,7 @@ module.exports = function() {
     return lotus.runCommand(command, options);
   }).then(function() {
     return process.exit();
-  }).done();
+  });
 };
 
 setupGlobal = function() {
@@ -24,6 +25,21 @@ setupGlobal = function() {
   require("reactive-var");
   global.prompt = require("prompt");
   return global.repl = require("repl");
+};
+
+setupErrorHandlers = function() {
+  var Promise;
+  Promise = require("Promise");
+  Promise._onUnhandledRejection = function(error, promise) {
+    console.log(error.stack);
+    return repl.sync({
+      error: error,
+      promise: promise
+    });
+  };
+  return process.on("uncaughtException", function(error) {
+    return console.log(error.stack);
+  });
 };
 
 setupBindings = function(log) {
