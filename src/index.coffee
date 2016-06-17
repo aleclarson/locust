@@ -1,10 +1,6 @@
 
-global.lotus = require "lotus-require"
-lotus.register {
-  exclude: [ "/node_modules/" ]
-}
-
-require "isDev"
+require "./global"
+module.exports = lotus
 
 assertTypes = require "assertTypes"
 assertType = require "assertType"
@@ -16,11 +12,8 @@ isType = require "isType"
 assert = require "assert"
 define = require "define"
 sync = require "sync"
-log = require "log"
 
 Plugin = require "./Plugin"
-
-module.exports = lotus
 
 if isDev
   configTypes =

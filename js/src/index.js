@@ -1,12 +1,8 @@
-var Plugin, Promise, Property, Tracer, assert, assertType, assertTypes, configTypes, define, isType, log, sync, syncFs;
+var Plugin, Promise, Property, Tracer, assert, assertType, assertTypes, configTypes, define, isType, sync, syncFs;
 
-global.lotus = require("lotus-require");
+require("./global");
 
-lotus.register({
-  exclude: ["/node_modules/"]
-});
-
-require("isDev");
+module.exports = lotus;
 
 assertTypes = require("assertTypes");
 
@@ -28,11 +24,7 @@ define = require("define");
 
 sync = require("sync");
 
-log = require("log");
-
 Plugin = require("./Plugin");
-
-module.exports = lotus;
 
 if (isDev) {
   configTypes = {

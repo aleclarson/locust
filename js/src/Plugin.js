@@ -177,7 +177,7 @@ type.defineStatics({
         plugin = Plugin(plugin);
       }
       if (!isType(plugin, Plugin)) {
-        return promise;
+        return;
       }
       pluginsLoading[plugin.name] = Promise.defer();
       return Promise["try"](function() {

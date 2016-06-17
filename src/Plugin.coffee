@@ -127,9 +127,7 @@ type.defineStatics
       if isType plugin, String
         plugin = Plugin plugin
 
-      unless isType plugin, Plugin
-        return promise
-
+      return if not isType plugin, Plugin
       pluginsLoading[plugin.name] = Promise.defer()
 
       Promise.try ->
