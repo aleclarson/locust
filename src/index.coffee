@@ -159,7 +159,6 @@ define lotus,
         log.moat 0
         log.gray.dim error.stack
         log.moat 1
-        process.exit()
 
   _initClasses: (options) ->
 

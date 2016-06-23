@@ -189,8 +189,7 @@ define(lotus, {
           log.white(plugin.name);
           log.moat(0);
           log.gray.dim(error.stack);
-          log.moat(1);
-          return process.exit();
+          return log.moat(1);
         });
       };
     })(this));

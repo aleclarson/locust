@@ -77,13 +77,9 @@ type.defineProperties({
     value: null,
     didSet: function(newValue) {
       assertType(newValue, String);
-      assert(Path.isAbsolute(newValue), {
+      return assert(Path.isAbsolute(newValue), {
         path: newValue,
         reason: "'dest' must be an absolute path!"
-      });
-      return assert(syncFs.isDir(newValue), {
-        path: newValue,
-        reason: "'dest' must be an existing directory!"
       });
     }
   },
@@ -91,35 +87,20 @@ type.defineProperties({
     value: null,
     didSet: function(newValue) {
       assertType(newValue, String);
-      assert(Path.isAbsolute(newValue), {
+      return assert(Path.isAbsolute(newValue), {
         path: newValue,
         reason: "'specDest' must be an absolute path!"
-      });
-      return assert(syncFs.isDir(newValue), {
-        path: newValue,
-        reason: "'specDest' must be an existing directory!"
       });
     }
   }
 });
 
 type.initInstance(function() {
-  assert(this.name[0] !== "/", {
-    mod: this,
-    reason: "Module name cannot begin with '/'!"
-  });
-  assert(this.name.slice(0, 2) !== "./", {
-    mod: this,
-    reason: "Module name cannot begin with './'!"
-  });
-  assert(syncFs.isDir(this.path), {
-    mod: this,
-    reason: "Module path must be a directory!"
-  });
-  assert(!inArray(lotus.config.ignoredModules, this.name), {
-    mod: this,
-    reason: "Module ignored by global config file!"
-  });
+  assert(this.name[0] !== "/", "Module name cannot begin with '/'!");
+  assert(this.name.slice(0, 2) !== "./", "Module name cannot begin with './'!");
+  assert(syncFs.isDir(this.path), "Module path must be a directory!");
+  assert(syncFs.isFile(this.path + "/package.json"), "'package.json' could not be found!");
+  assert(!inArray(lotus.config.ignoredModules, this.name), "Module ignored by global config file!");
   if (Module._debug) {
     log.moat(1);
     log.green.dim("new Module(");
@@ -388,7 +369,7 @@ Module.addLoaders({
           }
         }
         if (isType(specDest, String)) {
-          assert(dest[0] !== "/", "'config.lotus.specDest' must be a relative path");
+          assert(specDest[0] !== "/", "'config.lotus.specDest' must be a relative path");
           return _this.specDest = Path.resolve(_this.path, specDest);
         } else {
           specDest = _this.path + "/js/spec";
@@ -451,8 +432,7 @@ Module.addLoaders({
           log.white(plugin.name);
           log.moat(0);
           log.gray.dim(error.stack);
-          log.moat(1);
-          return process.exit();
+          return log.moat(1);
         });
       };
     })(this));

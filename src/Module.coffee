@@ -54,7 +54,6 @@ type.defineProperties
     didSet: (newValue) ->
       assertType newValue, String
       assert Path.isAbsolute(newValue), { path: newValue, reason: "'dest' must be an absolute path!" }
-      assert syncFs.isDir(newValue), { path: newValue, reason: "'dest' must be an existing directory!" }
 
   # Where the compiled test files are located.
   specDest:
@@ -62,14 +61,14 @@ type.defineProperties
     didSet: (newValue) ->
       assertType newValue, String
       assert Path.isAbsolute(newValue), { path: newValue, reason: "'specDest' must be an absolute path!" }
-      assert syncFs.isDir(newValue), { path: newValue, reason: "'specDest' must be an existing directory!" }
 
 type.initInstance ->
 
-  assert @name[0] isnt "/", { mod: this, reason: "Module name cannot begin with '/'!" }
-  assert @name[0..1] isnt "./", { mod: this, reason: "Module name cannot begin with './'!" }
-  assert syncFs.isDir(@path), { mod: this, reason: "Module path must be a directory!" }
-  assert not inArray(lotus.config.ignoredModules, @name), { mod: this, reason: "Module ignored by global config file!" }
+  assert @name[0] isnt "/", "Module name cannot begin with '/'!"
+  assert @name[0..1] isnt "./", "Module name cannot begin with './'!"
+  assert syncFs.isDir(@path), "Module path must be a directory!"
+  assert syncFs.isFile(@path + "/package.json"), "'package.json' could not be found!"
+  assert not inArray(lotus.config.ignoredModules, @name), "Module ignored by global config file!"
 
   if Module._debug
     log.moat 1
@@ -308,7 +307,7 @@ Module.addLoaders
         @dest = dest if syncFs.isDir dest
 
       if isType specDest, String
-        assert dest[0] isnt "/", "'config.lotus.specDest' must be a relative path"
+        assert specDest[0] isnt "/", "'config.lotus.specDest' must be a relative path"
         @specDest = Path.resolve @path, specDest
 
       else
@@ -358,7 +357,6 @@ Module.addLoaders
         log.moat 0
         log.gray.dim error.stack
         log.moat 1
-        process.exit()
 
 errors =
 
