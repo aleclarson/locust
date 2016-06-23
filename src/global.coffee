@@ -1,34 +1,60 @@
 
-lotus = require "./index"
-lotus.forceAll = yes
+global.lotus = require "lotus-require"
+lotus.register exclude: [ "/node_modules/" ]
 
-require "failure/global"
+require "isDev"
 
-# These classes inject themselves into the Property class.
-require "lazy-var"
-require "reactive-var"
+inject = require "Property/inject"
+inject "ReactiveVar", require "ReactiveVar"
+inject "LazyVar", require "LazyVar"
 
-combine = require "combine"
-define = require "define"
+inject = require "Builder/inject"
+inject "EventMap", require("Event").Map
 
-log = require "log"
-# log.clear()
-log.indent = 2
-log.moat 1
+global.prompt = require "prompt"
+global.repl = require "repl"
+global.log = require "log"
 
-combine global, {
-  log
-  lotus
-  isDev: require "isDev"
-  emptyFunction: require "emptyFunction"
-  sync: require "sync"
-  Q: require "q"
-}
+#
+# Key bindings
+#
 
-combine global, props for props in [
-  require "type-utils"
-]
+if process.stdin.setRawMode
 
-define global, {
-  repl: lazy: -> require "repl"
-}
+  KeyBindings = require "key-bindings"
+
+  keys = KeyBindings
+
+    "c+ctrl": ->
+      log.moat 1
+      log.red "CTRL+C"
+      log.moat 1
+      process.exit()
+
+    "x+ctrl": ->
+      log.moat 1
+      log.red "CTRL+X"
+      log.moat 1
+      process.exit()
+
+  keys.stream = process.stdin
+
+#
+# Error handling
+#
+
+onError = (error, promise) ->
+  try
+    throw error if log.isDebug
+    log.moat 1
+    log.red "Error: "
+    log.white error.message
+    log.moat 0
+    log.gray.dim error.stack.split(log.ln).slice(1).join(log.ln)
+    log.moat 1
+  catch error
+    console.log error.stack
+
+require("Promise")._onUnhandledRejection = onError
+
+process.on "uncaughtException", onError

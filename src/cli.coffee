@@ -1,74 +1,30 @@
 
-require "./Global"
+module.exports = ->
 
-lotus.Plugin = require "./Plugin"
-lotus.Module = require "./Module"
-lotus.File = require "./File"
+  require "./global"
+  require "./index"
 
-minimist = require "minimist"
+  log.indent = 2
+  log.moat 1
 
-process.cli = yes
-process.options = minimist process.argv.slice 2
+  minimist = require "minimist"
+  options = minimist process.argv.slice 2
 
-command = process.options._[0] or "watch"
+  command = options._.shift()
 
-lotus.Plugin.commands.watch = ->
-  require "./watch"
+  lotus.initialize options
 
-global.Config = require "./Config"
+  .then -> lotus.runCommand command, options
 
-global.GlobalConfig = Config lotus.path
+  .always (error) ->
 
-Q.try ->
-
-  return unless GlobalConfig.plugins
-
-  Q.all sync.map GlobalConfig.plugins, (name) ->
-
-    Q.try ->
-      plugin = lotus.Plugin name
-      plugin.load()
-
-    .fail (error) ->
+    if error
       log.moat 1
-      log.red "Plugin error: "
-      log.white name
+      log.red error.constructor.name, ": "
+      log.white error.message
       log.moat 0
-      log.gray.dim error.stack, " "
+      log.gray.dim error.stack.split(log.ln).slice(1).join(log.ln)
       log.moat 1
-      process.exit()
 
-  .then ->
-    return if process.options._[0]
-    return unless process.options.help
-    printCommandList()
+    log.cursor.isHidden = no
     process.exit()
-
-.then ->
-
-  runCommand = lotus.Plugin.commands[command]
-
-  if runCommand is undefined
-    printCommandList()
-    log.moat 1
-    log.red "Unknown command: "
-    log.white command
-    log.moat 1
-    process.exit()
-
-  assert (isType runCommand, Function), { command, reason: "The command failed to export a Function!" }
-  runCommand()
-
-.done()
-
-printCommandList = ->
-  commands = Object.keys lotus.Plugin.commands
-  log.moat 1
-  log.green "Available commands:"
-  log.plusIndent 2
-  sync.each commands, (command) ->
-    log.moat 0
-    log.gray.dim "lotus "
-    log.white command
-  log.popIndent()
-  log.moat 1
