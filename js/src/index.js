@@ -1,4 +1,4 @@
-var Plugin, Promise, Property, Tracer, assert, assertType, assertTypes, configTypes, define, isType, sync, syncFs;
+var Plugin, Promise, Property, Tracer, assert, assertType, assertTypes, configTypes, define, fs, isType, sync;
 
 require("./global");
 
@@ -14,8 +14,6 @@ Promise = require("Promise");
 
 Tracer = require("tracer");
 
-syncFs = require("io/sync");
-
 isType = require("isType");
 
 assert = require("assert");
@@ -23,6 +21,8 @@ assert = require("assert");
 define = require("define");
 
 sync = require("sync");
+
+fs = require("io/sync");
 
 Plugin = require("./Plugin");
 
@@ -97,7 +97,7 @@ define(lotus, {
     if (isDev) {
       assertTypes(config, configTypes.callMethod, "config");
       assert(config.dir[0] === "/", "'config.dir' must be an absolute path!");
-      assert(syncFs.isDir(config.dir), "'config.dir' must be an existing directory!");
+      assert(fs.isDir(config.dir), "'config.dir' must be an existing directory!");
     }
     if (!isType(methodName, String)) {
       log.moat(1);
@@ -107,7 +107,7 @@ define(lotus, {
       log.gray.dim("lotus ", config.command);
       log.gray(" [method]");
       log.plusIndent(2);
-      files = syncFs.readDir(config.dir);
+      files = fs.readDir(config.dir);
       sync.each(files, function(file) {
         methodName = file.replace(/\.js$/, "");
         log.moat(0);
@@ -142,13 +142,12 @@ define(lotus, {
     if (isType(lotus.config, Object)) {
       return;
     }
-    syncFs = require("io/sync");
     path = lotus.path + "/lotus.json";
-    assert(syncFs.isFile(path), {
+    assert(fs.isFile(path), {
       path: path,
       reason: "Failed to find global configuration!"
     });
-    lotus.config = JSON.parse(syncFs.read(path));
+    lotus.config = JSON.parse(fs.read(path));
   },
   _loadPlugins: function() {
     var plugins, tracer;

@@ -1,13 +1,12 @@
 {
   "name": "lotus",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "main": "js/src/index",
   "bin": {
     "lotus": "./bin/lotus"
   },
   "dependencies": {
     "Builder": "aleclarson/Builder#1.0.0",
-    "ErrorMap": "aleclarson/ErrorMap#1.0.0",
     "Event": "aleclarson/Event#2.0.0",
     "LazyVar": "aleclarson/LazyVar#2.0.0",
     "Promise": "aleclarson/Promise#1.0.0",
@@ -19,10 +18,8 @@
     "assertTypes": "aleclarson/assertTypes#1.0.0",
     "define": "aleclarson/define#1.0.0",
     "emptyFunction": "aleclarson/emptyFunction#1.0.0",
-    "failure": "aleclarson/failure#1.0.0",
     "globby": "aleclarson/globby#4.0.0",
     "hasKeys": "aleclarson/hasKeys#1.0.0",
-    "in-array": "aleclarson/in-array#1.0.0",
     "io": "aleclarson/io#1.0.0",
     "isDev": "aleclarson/isDev#1.0.0",
     "isType": "aleclarson/isType#1.0.0",

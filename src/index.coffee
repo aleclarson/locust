@@ -7,11 +7,11 @@ assertType = require "assertType"
 Property = require "Property"
 Promise = require "Promise"
 Tracer = require "tracer"
-syncFs = require "io/sync"
 isType = require "isType"
 assert = require "assert"
 define = require "define"
 sync = require "sync"
+fs = require "io/sync"
 
 Plugin = require "./Plugin"
 
@@ -75,7 +75,7 @@ define lotus,
     if isDev
       assertTypes config, configTypes.callMethod, "config"
       assert config.dir[0] is "/", "'config.dir' must be an absolute path!"
-      assert syncFs.isDir(config.dir), "'config.dir' must be an existing directory!"
+      assert fs.isDir(config.dir), "'config.dir' must be an existing directory!"
 
     unless isType methodName, String
       log.moat 1
@@ -85,7 +85,7 @@ define lotus,
       log.gray.dim "lotus ", config.command
       log.gray " [method]"
       log.plusIndent 2
-      files = syncFs.readDir config.dir
+      files = fs.readDir config.dir
       sync.each files, (file) ->
         methodName = file.replace /\.js$/, ""
         log.moat 0
@@ -117,10 +117,9 @@ define lotus,
 
   _initConfig: ->
     return if isType lotus.config, Object
-    syncFs = require "io/sync"
     path = lotus.path + "/lotus.json"
-    assert syncFs.isFile(path), { path, reason: "Failed to find global configuration!" }
-    lotus.config = JSON.parse syncFs.read path
+    assert fs.isFile(path), { path, reason: "Failed to find global configuration!" }
+    lotus.config = JSON.parse fs.read path
     return
 
   _loadPlugins: ->

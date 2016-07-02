@@ -1,25 +1,21 @@
 
 # TODO: Fix crash when renaming a module directory.
 
-{ throwFailure } = require "failure"
-
+emptyFunction = require "emptyFunction"
 SortedArray = require "sorted-array"
 assertType = require "assertType"
 sortObject = require "sortObject"
-ErrorMap = require "ErrorMap"
 Promise = require "Promise"
-inArray = require "in-array"
-asyncFs = require "io/async"
 hasKeys = require "hasKeys"
-syncFs = require "io/sync"
 Tracer = require "tracer"
 isType = require "isType"
 globby = require "globby"
 assert = require "assert"
 sync = require "sync"
-Path = require "path"
+path = require "path"
 Type = require "Type"
 log = require "log"
+fs = require "io"
 
 type = Type "Lotus_Module"
 
@@ -27,9 +23,8 @@ type.argumentTypes =
   name: String
   path: String
 
-type.createArguments (args) ->
-  args[1] ?= Path.resolve lotus.path, args[0]
-  return args
+type.initArguments ([ name ]) ->
+  assert not Module.cache[name], "Module named '#{name}' already exists!"
 
 type.returnCached (name) ->
   return name
@@ -46,36 +41,40 @@ type.defineValues
 
   _crawling: -> Object.create null
 
+resolveAbsolutePath = (newValue) ->
+  assertType newValue, String
+  return newValue if path.isAbsolute newValue
+  return path.resolve @path, newValue
+
 type.defineProperties
 
-  # Where the compiled source files are located.
+  # The pattern for source files.
+  src:
+    value: null
+    willSet: resolveAbsolutePath
+
+  # The pattern for test files.
+  spec:
+    value: null
+    willSet: resolveAbsolutePath
+
+  # The directory to put transformed source files.
   dest:
     value: null
-    didSet: (newValue) ->
-      assertType newValue, String
-      assert Path.isAbsolute(newValue), { path: newValue, reason: "'dest' must be an absolute path!" }
+    willSet: resolveAbsolutePath
 
-  # Where the compiled test files are located.
+  # The directory to put transformed test files.
   specDest:
     value: null
-    didSet: (newValue) ->
-      assertType newValue, String
-      assert Path.isAbsolute(newValue), { path: newValue, reason: "'specDest' must be an absolute path!" }
+    willSet: resolveAbsolutePath
 
 type.initInstance ->
-
-  assert @name[0] isnt "/", "Module name cannot begin with '/'!"
-  assert @name[0..1] isnt "./", "Module name cannot begin with './'!"
-  assert syncFs.isDir(@path), "Module path must be a directory!"
-  assert syncFs.isFile(@path + "/package.json"), "'package.json' could not be found!"
-  assert not inArray(lotus.config.ignoredModules, @name), "Module ignored by global config file!"
-
-  if Module._debug
-    log.moat 1
-    log.green.dim "new Module("
-    log.green "\"#{@name}\""
-    log.green.dim ")"
-    log.moat 1
+  return if not Module._debug
+  log.moat 1
+  log.green.dim "new Module("
+  log.green "\"#{@name}\""
+  log.green.dim ")"
+  log.moat 1
 
 type.defineMethods
 
@@ -94,7 +93,7 @@ type.defineMethods
 
       .fail (error) =>
         @_loading[name] = null
-        throwFailure error, { mod: this, name, stack: tracer() }
+        throw error
 
   # Find any files that belong to this module.
   # Use the 'lotus-watch' plugin and call 'Module.watch' if
@@ -117,41 +116,41 @@ type.defineMethods
 
     if Array.isArray pattern
 
-      return Promise.all sync.map pattern, (pattern) =>
-        @crawl pattern
+      return Promise.map pattern, (pattern) =>
+        @crawl pattern, options
 
       .then (filesByPattern) ->
         paths = Object.create null
         results = []
-        for files in filesByPattern
-          for file in files
-            continue if paths[file.path]
+        filesByPattern.forEach (files) ->
+          files.forEach (file) ->
+            return if paths[file.path]
             paths[file.path] = yes
             results.push file
         return results
 
     assertType pattern, String
 
-    if pattern[0] isnt "/"
-      pattern = Path.resolve @path, pattern
+    if not path.isAbsolute pattern[0]
+      pattern = path.resolve @path, pattern
 
-    if options.force
-      # TODO: Handle cancellation properly.
+    if not options.force
+      return @_crawling[pattern] if @_crawling[pattern]
 
-    else if @_crawling[pattern]
-      return @_crawling[pattern]
+    if options.verbose
+      log.moat 1
+      log.white "crawl "
+      log.cyan lotus.relative pattern
+      log.moat 1
 
     @_crawling[pattern] =
 
       globby pattern, { nodir: yes, ignore: "**/node_modules/**" }
 
-      .then (paths) => # TODO: Handle cancellation properly.
+      .then (filePaths) => # TODO: Handle cancellation properly.
         files = []
-        for path in paths
-          try files.push lotus.File path, this
-          catch error
-            errors.createFile.resolve error, =>
-              log.yellow @name
+        for filePath in filePaths
+          files.push lotus.File filePath, this
         return files
 
       .fail (error) =>
@@ -162,7 +161,7 @@ type.defineMethods
 
     return unless @config
 
-    path = @path + "/package.json"
+    configPath = @path + "/package.json"
 
     { dependencies, devDependencies } = @config
 
@@ -175,7 +174,7 @@ type.defineMethods
     else delete @config.devDependencies
 
     config = JSON.stringify @config, null, 2
-    syncFs.write path, config + log.ln
+    fs.sync.write configPath, config + log.ln
     return
 
 type.defineStatics
@@ -186,73 +185,65 @@ type.defineStatics
 
   _plugins: []
 
-  resolvePath: (modulePath) ->
-
-    if modulePath[0] is "."
-      modulePath = Path.resolve process.cwd(), modulePath
-
-    else if modulePath[0] isnt "/"
-      modulePath = lotus.path + "/" + modulePath
-
-    return modulePath
-
-  # Always returns a Module if the given directory
-  # is valid. Creates a new Module if one does not exist.
-  tryPath: (modulePath) ->
-
-    if not syncFs.isDir modulePath
-      return null
-
-    if not syncFs.isFile modulePath + "/package.json"
-      return null
-
-    moduleName = Path.relative lotus.path, modulePath
-
-    # The 'modulePath' must be a descendant of 'lotus.path'!
-    if moduleName[0] is "."
-      return null
-
-    # The 'moduleName' cannot have any slashes!
-    if 0 <= moduleName.indexOf "/"
-      return null
-
-    if Module.cache[moduleName]
-      return Module.cache[moduleName]
-
-    try return Module moduleName, modulePath
-    catch error
-      errors.createModule.resolve error, ->
-        log.yellow moduleName
-
-  # Takes the path of a file and returns
-  # its module if one exists.
-  getParent: (path) ->
-    path = Path.relative lotus.path, path
-    name = path.slice 0, path.indexOf "/"
+  resolve: (filePath) ->
+    filePath = path.relative lotus.path, filePath
+    name = filePath.slice 0, filePath.indexOf path.sep
     return Module.cache[name]
+
+  load: (moduleName) ->
+
+    if moduleName[0] is "."
+      modulePath = path.resolve process.cwd(), moduleName
+      moduleName = path.basename modulePath
+
+    else if path.isAbsolute moduleName
+      modulePath = moduleName
+      moduleName = lotus.relative modulePath
+
+    else
+      modulePath = path.join lotus.path, moduleName
+
+    fs.async.isDir modulePath
+    .assert "Module path must be a directory: '#{modulePath}'"
+
+    .then ->
+      configPath = path.join modulePath, "package.json"
+      fs.async.isFile configPath
+      .assert "Missing config file: '#{configPath}'"
+
+    .then ->
+      Module.cache[moduleName] or
+        Module moduleName, modulePath
 
   # Find modules in the given directory.
   # Import the 'lotus-watch' plugin and
-  # call 'Method.watch' if you need to know
+  # call 'Module.watch' if you need to know
   # about added/changed/deleted modules.
-  crawl: (path) ->
+  crawl: (dirPath) ->
 
     # TODO: Support multiple $LOTUS_PATH
-    path ?= lotus.path
-    assert Path.isAbsolute(path), "Expected an absolute path!"
-    assert syncFs.isDir(path), "Expected an existing directory!"
+    dirPath ?= lotus.path
+
+    assertType dirPath, String
+
+    if not path.isAbsolute dirPath
+      throw Error "Expected an absolute path: '#{dirPath}'"
+
+    if not fs.sync.isDir dirPath
+      throw Error "Expected a directory: '#{dirPath}'"
 
     mods = SortedArray [], (a, b) ->
       a = a.name.toLowerCase()
       b = b.name.toLowerCase()
       if a > b then 1 else -1
 
-    children = syncFs.readDir path
-    sync.each children, (moduleName) ->
-      modulePath = lotus.path + "/" + moduleName
-      mod = Module.tryPath modulePath
-      mods.insert mod if mod
-    return mods.array
+    fs.async.readDir dirPath
+    .then (children) ->
+      Promise.chain children, (moduleName) ->
+        Module.load moduleName
+        .then (mod) -> mod and mods.insert mod
+        .fail emptyFunction # Ignore module errors.
+    .then -> mods.array
 
   addLoader: (name, loader) ->
     assert not @_loaders[name], "Loader named '#{name}' already exists!"
@@ -280,39 +271,33 @@ Module.addLoaders
 
   config: ->
 
-    path = @path + "/package.json"
+    configPath = @path + "/package.json"
 
-    unless syncFs.isFile path
+    unless fs.sync.isFile configPath
       error = Error "'package.json' could not be found!"
       return Promise.reject error
 
-    asyncFs.read path
+    fs.async.read configPath
 
     .then (json) =>
 
       @config = JSON.parse json
+      config = @config.lotus or {}
 
-      if isType @config.lotus, Object
-        { dest, specDest } = @config.lotus
+      if isType config.src, String
+        @src = config.src
 
-      if isType dest, String
-        assert dest[0] isnt "/", "'config.lotus.dest' must be a relative path"
-        @dest = Path.resolve @path, dest
+      if isType config.spec, String
+        @spec = config.spec
+
+      if isType config.dest, String
+        @dest = config.dest
 
       else if isType @config.main, String
-        @dest = Path.dirname Path.join @path, @config.main
+        @dest = path.dirname path.join @path, @config.main
 
-      else
-        dest = @path + "/js/src"
-        @dest = dest if syncFs.isDir dest
-
-      if isType specDest, String
-        assert specDest[0] isnt "/", "'config.lotus.specDest' must be a relative path"
-        @specDest = Path.resolve @path, specDest
-
-      else
-        specDest = @path + "/js/spec"
-        @specDest = specDest if syncFs.isDir specDest
+      if isType config.specDest, String
+        @specDest = config.specDest
 
   plugins: ->
 
@@ -357,15 +342,3 @@ Module.addLoaders
         log.moat 0
         log.gray.dim error.stack
         log.moat 1
-
-errors =
-
-  createFile: ErrorMap
-    quiet: []
-
-  createModule: ErrorMap
-    quiet: [
-      "Module path must be a directory!"
-      "Module with that name already exists!"
-      "Module ignored by global config file!"
-    ]

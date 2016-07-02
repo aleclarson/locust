@@ -1,4 +1,6 @@
-var File, Path, Promise, Type, assert, asyncFs, isType, log, syncFs, type;
+var File, Promise, Type, assertType, asyncFs, isType, log, path, syncFs, type;
+
+assertType = require("assertType");
 
 Promise = require("Promise");
 
@@ -8,9 +10,7 @@ syncFs = require("io/sync");
 
 isType = require("isType");
 
-assert = require("assert");
-
-Path = require("path");
+path = require("path");
 
 Type = require("Type");
 
@@ -19,36 +19,30 @@ log = require("log");
 type = Type("Lotus_File");
 
 type.argumentTypes = {
-  path: String
+  filePath: String
 };
 
 type.willBuild(function() {
   return this.initArguments(function(args) {
-    var Module;
-    Module = lotus.Module;
-    assert(Path.isAbsolute(args[0]), {
-      args: args,
-      reason: "Expected an absolute path!"
-    });
-    if (args[1] == null) {
-      args[1] = Module.getParent(args[0]);
+    if (!path.isAbsolute(args[0])) {
+      throw Error("Expected an absolute path: '" + args[0] + "'");
     }
-    return assert(isType(args[1], Module), {
-      args: args,
-      reason: "This file belongs to an unknown module!"
-    });
+    if (args[1] == null) {
+      args[1] = lotus.Module.getParent(args[0]);
+    }
+    return assertType(args[1], lotus.Module, "module");
   });
 });
 
-type.returnExisting(function(path, mod) {
-  return mod.files[path];
+type.returnExisting(function(filePath, mod) {
+  return mod.files[filePath];
 });
 
-type.initInstance(function(path, mod) {
+type.initInstance(function(filePath, mod) {
   var fileName;
-  mod.files[path] = this;
+  mod.files[filePath] = this;
   if (File._debug) {
-    fileName = mod.name + "/" + Path.relative(mod.path, path);
+    fileName = path.join(mod.name, path.relative(mod.path, filePath));
     log.moat(1);
     log.green.dim("new File(");
     log.green("\"" + fileName + "\"");
@@ -58,67 +52,43 @@ type.initInstance(function(path, mod) {
 });
 
 type.defineValues({
-  path: function(path) {
-    return path;
+  path: function(filePath) {
+    return filePath;
   },
-  module: function(path, mod) {
+  module: function(_, mod) {
     return mod;
   },
   extension: function() {
-    return Path.extname(this.path);
+    return path.extname(this.path);
   },
   name: function() {
-    return Path.basename(this.path, this.extension);
+    return path.basename(this.path, this.extension);
   },
   dir: function() {
-    return Path.relative(this.module.path, Path.dirname(this.path));
+    return path.relative(this.module.path, path.dirname(this.path));
   },
   _reading: null
 });
 
-type.defineProperties({
+type.definePrototype({
   dest: {
     get: function() {
-      var destRoot, destRootToDir, relDir, relPath, srcRoot;
+      var dest, parents, src;
       if (!this.dir.length) {
         return null;
       }
-      destRoot = this.type === "src" ? this.module.dest : this.module.specDest;
-      if (!destRoot) {
+      if (this.module.src && this.path.startsWith(this.module.src)) {
+        src = this.module.src;
+        dest = this.module.dest;
+      } else if (this.module.spec && this.path.startsWith(this.module.spec)) {
+        src = this.module.spec;
+        dest = this.module.specDest;
+      }
+      if (!(src && dest)) {
         return null;
       }
-      destRootToDir = Path.relative(destRoot, Path.join(this.module.path, this.dir));
-      if (destRootToDir[0] !== ".") {
-        return null;
-      }
-      if (!destRoot) {
-        log.moat(1);
-        log.yellow("Warning: ");
-        log.white(this.path);
-        log.moat(0);
-        log.gray.dim("'file.dest' is not defined!");
-        log.moat(0);
-        log.gray("{ type: " + this.type + " }");
-        log.moat(1);
-        return null;
-      }
-      relPath = Path.relative(destRoot, this.path);
-      if (relPath[1] !== ".") {
-        return this.path;
-      }
-      srcRoot = Path.join(this.module.path, "src");
-      if (this.path) {
-        relDir = Path.relative(srcRoot, Path.dirname(this.path));
-      }
-      return Path.join(destRoot, relDir, this.name + ".js");
-    }
-  },
-  type: {
-    get: function() {
-      if (/[\/]*spec[\/]*/.test(this.dir)) {
-        return "spec";
-      }
-      return "src";
+      parents = path.relative(src, path.dirname(this.path));
+      return path.join(dest, parents, this.name + ".js");
     }
   }
 });

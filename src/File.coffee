@@ -1,37 +1,35 @@
 
+assertType = require "assertType"
 Promise = require "Promise"
 asyncFs = require "io/async"
 syncFs = require "io/sync"
 isType = require "isType"
-assert = require "assert"
-Path = require "path"
+path = require "path"
 Type = require "Type"
 log = require "log"
 
 type = Type "Lotus_File"
 
 type.argumentTypes =
-  path: String
+  filePath: String
 
 # Initialize after 'argumentTypes' is validated.
 type.willBuild -> @initArguments (args) ->
 
-  { Module } = lotus
+  if not path.isAbsolute args[0]
+    throw Error "Expected an absolute path: '#{args[0]}'"
 
-  assert Path.isAbsolute(args[0]), { args, reason: "Expected an absolute path!" }
+  args[1] ?= lotus.Module.getParent args[0]
+  assertType args[1], lotus.Module, "module"
 
-  args[1] ?= Module.getParent args[0]
+type.returnExisting (filePath, mod) -> mod.files[filePath]
 
-  assert isType(args[1], Module), { args, reason: "This file belongs to an unknown module!" }
+type.initInstance (filePath, mod) ->
 
-type.returnExisting (path, mod) -> mod.files[path]
-
-type.initInstance (path, mod) ->
-
-  mod.files[path] = this
+  mod.files[filePath] = this
 
   if File._debug
-    fileName = mod.name + "/" + Path.relative mod.path, path
+    fileName = path.join mod.name, path.relative mod.path, filePath
     log.moat 1
     log.green.dim "new File("
     log.green "\"#{fileName}\""
@@ -40,66 +38,38 @@ type.initInstance (path, mod) ->
 
 type.defineValues
 
-  path: (path) -> path
+  path: (filePath) -> filePath
 
-  module: (path, mod) -> mod
+  module: (_, mod) -> mod
 
-  extension: -> Path.extname @path
+  extension: -> path.extname @path
 
-  name: -> Path.basename @path, @extension
+  name: -> path.basename @path, @extension
 
-  dir: -> Path.relative @module.path, Path.dirname @path
+  dir: -> path.relative @module.path, path.dirname @path
 
   _reading: null
 
-type.defineProperties
+type.definePrototype
 
   dest: get: ->
 
-    # This file is a direct child of '@module.path'!
-    unless @dir.length
+    if not @dir.length
       return null
 
-    destRoot =
-      if @type is "src" then @module.dest
-      else @module.specDest
+    if @module.src and @path.startsWith @module.src
+      src = @module.src
+      dest = @module.dest
 
-    # The output directory is not yet known!
-    unless destRoot
+    else if @module.spec and @path.startsWith @module.spec
+      src = @module.spec
+      dest = @module.specDest
+
+    unless src and dest
       return null
 
-    destRootToDir = Path.relative destRoot, Path.join @module.path, @dir
-
-    # This file is already in 'destRoot'!
-    if destRootToDir[0] isnt "."
-      return null
-
-    unless destRoot
-      log.moat 1
-      log.yellow "Warning: "
-      log.white @path
-      log.moat 0
-      log.gray.dim "'file.dest' is not defined!"
-      log.moat 0
-      log.gray "{ type: #{@type} }"
-      log.moat 1
-      return null
-
-    relPath = Path.relative destRoot, @path
-
-    # This file is already in the destination directory.
-    return @path if relPath[1] isnt "."
-
-    srcRoot = Path.join @module.path, "src" # TODO: Replace "src" with dynamic value.
-
-    if @path
-      relDir = Path.relative srcRoot, Path.dirname @path
-
-    Path.join destRoot, relDir, @name + ".js"
-
-  type: get: ->
-    return "spec" if /[\/]*spec[\/]*/.test @dir
-    return "src"
+    parents = path.relative src, path.dirname @path
+    return path.join dest, parents, @name + ".js"
 
 type.defineMethods
 
