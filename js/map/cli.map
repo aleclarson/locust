@@ -1,7 +1,7 @@
 {
   "version": 3,
   "file": "cli.js",
-  "sourceRoot": "../../../src",
+  "sourceRoot": "../../src",
   "sources": [
     "cli.coffee"
   ],

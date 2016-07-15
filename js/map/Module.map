@@ -1,7 +1,7 @@
 {
   "version": 3,
   "file": "Module.js",
-  "sourceRoot": "../../../src",
+  "sourceRoot": "../../src",
   "sources": [
     "Module.coffee"
   ],
