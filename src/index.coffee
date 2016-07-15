@@ -6,37 +6,29 @@ assertTypes = require "assertTypes"
 assertType = require "assertType"
 Property = require "Property"
 Promise = require "Promise"
+inArray = require "in-array"
 Tracer = require "tracer"
-syncFs = require "io/sync"
 isType = require "isType"
 assert = require "assert"
 define = require "define"
 sync = require "sync"
+fs = require "io/sync"
 
 Plugin = require "./Plugin"
 
-if isDev
-  configTypes =
-    callMethod:
-      dir: String
-      command: String
-      options: Object.Maybe
+initializing = no
 
 define lotus,
 
-  _initializing: null
-
   initialize: (options = {}) ->
-    unless Promise.isRejected @_initializing
-      return @_initializing
+    return initializing if not Promise.isRejected initializing
     @_initConfig()
-    @_initializing =
-      Promise.try => @_loadPlugins()
-      .then => @_initClasses options
+    initializing = @_loadPlugins()
+    .then => @_initClasses options
 
   runCommand: (command, options = {}) ->
 
-    assert Promise.isFulfilled(@_initializing), "Must call 'initialize' first!"
+    assert Promise.isFulfilled(initializing), "Must call 'lotus.initialize' first!"
 
     if not isType command, String
       log.moat 1
@@ -72,10 +64,14 @@ define lotus,
 
   callMethod: (methodName, config) ->
 
-    if isDev
-      assertTypes config, configTypes.callMethod, "config"
-      assert config.dir[0] is "/", "'config.dir' must be an absolute path!"
-      assert syncFs.isDir(config.dir), "'config.dir' must be an existing directory!"
+    assertType methodName, String
+    assertTypes config,
+      dir: String
+      command: String
+      options: Object.Maybe
+
+    assert config.dir[0] is "/", "'config.dir' must be an absolute path!"
+    assert fs.isDir(config.dir), "'config.dir' must be an existing directory!"
 
     unless isType methodName, String
       log.moat 1
@@ -85,7 +81,7 @@ define lotus,
       log.gray.dim "lotus ", config.command
       log.gray " [method]"
       log.plusIndent 2
-      files = syncFs.readDir config.dir
+      files = fs.readDir config.dir
       sync.each files, (file) ->
         methodName = file.replace /\.js$/, ""
         log.moat 0
@@ -115,15 +111,18 @@ define lotus,
     return Promise.try ->
       method.call method, config.options or {}
 
+  isModuleIgnored: (moduleName) ->
+    assert Promise.isFulfilled(initializing), "Must call 'lotus.initialize' first!"
+    return inArray lotus.config.ignoredModules, moduleName
+
   _initConfig: ->
     return if isType lotus.config, Object
-    syncFs = require "io/sync"
-    path = lotus.path + "/lotus.json"
-    assert syncFs.isFile(path), { path, reason: "Failed to find global configuration!" }
-    lotus.config = JSON.parse syncFs.read path
+    configPath = lotus.path + "/lotus.json"
+    assert fs.isFile(configPath), "Missing global config: '#{configPath}'"
+    lotus.config = JSON.parse fs.read configPath
     return
 
-  _loadPlugins: ->
+  _loadPlugins: Promise.wrap ->
 
     assert lotus.config, "Must call '_initConfig' first!"
     { plugins } = lotus.config

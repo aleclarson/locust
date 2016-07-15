@@ -211,4 +211,4 @@ type.didBuild(function() {
 
 module.exports = Plugin = type.build();
 
-//# sourceMappingURL=../../map/src/Plugin.map
+//# sourceMappingURL=map/Plugin.map

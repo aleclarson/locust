@@ -55,6 +55,6 @@ onError = (error, promise) ->
   catch error
     console.log error.stack
 
-require("Promise")._onUnhandledRejection = onError
+require("Promise").onUnhandledRejection onError
 
 process.on "uncaughtException", onError

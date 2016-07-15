@@ -1,4 +1,4 @@
-var Plugin, Promise, Property, Tracer, assert, assertType, assertTypes, configTypes, define, isType, sync, syncFs;
+var Plugin, Promise, Property, Tracer, assert, assertType, assertTypes, define, fs, inArray, initializing, isType, sync;
 
 require("./global");
 
@@ -12,9 +12,9 @@ Property = require("Property");
 
 Promise = require("Promise");
 
-Tracer = require("tracer");
+inArray = require("in-array");
 
-syncFs = require("io/sync");
+Tracer = require("tracer");
 
 isType = require("isType");
 
@@ -24,33 +24,22 @@ define = require("define");
 
 sync = require("sync");
 
+fs = require("io/sync");
+
 Plugin = require("./Plugin");
 
-if (isDev) {
-  configTypes = {
-    callMethod: {
-      dir: String,
-      command: String,
-      options: Object.Maybe
-    }
-  };
-}
+initializing = false;
 
 define(lotus, {
-  _initializing: null,
   initialize: function(options) {
     if (options == null) {
       options = {};
     }
-    if (!Promise.isRejected(this._initializing)) {
-      return this._initializing;
+    if (!Promise.isRejected(initializing)) {
+      return initializing;
     }
     this._initConfig();
-    return this._initializing = Promise["try"]((function(_this) {
-      return function() {
-        return _this._loadPlugins();
-      };
-    })(this)).then((function(_this) {
+    return initializing = this._loadPlugins().then((function(_this) {
       return function() {
         return _this._initClasses(options);
       };
@@ -61,7 +50,7 @@ define(lotus, {
     if (options == null) {
       options = {};
     }
-    assert(Promise.isFulfilled(this._initializing), "Must call 'initialize' first!");
+    assert(Promise.isFulfilled(initializing), "Must call 'lotus.initialize' first!");
     if (!isType(command, String)) {
       log.moat(1);
       log.red("Error: ");
@@ -94,11 +83,14 @@ define(lotus, {
   },
   callMethod: function(methodName, config) {
     var files, method, modulePath;
-    if (isDev) {
-      assertTypes(config, configTypes.callMethod, "config");
-      assert(config.dir[0] === "/", "'config.dir' must be an absolute path!");
-      assert(syncFs.isDir(config.dir), "'config.dir' must be an existing directory!");
-    }
+    assertType(methodName, String);
+    assertTypes(config, {
+      dir: String,
+      command: String,
+      options: Object.Maybe
+    });
+    assert(config.dir[0] === "/", "'config.dir' must be an absolute path!");
+    assert(fs.isDir(config.dir), "'config.dir' must be an existing directory!");
     if (!isType(methodName, String)) {
       log.moat(1);
       log.red("Error: ");
@@ -107,7 +99,7 @@ define(lotus, {
       log.gray.dim("lotus ", config.command);
       log.gray(" [method]");
       log.plusIndent(2);
-      files = syncFs.readDir(config.dir);
+      files = fs.readDir(config.dir);
       sync.each(files, function(file) {
         methodName = file.replace(/\.js$/, "");
         log.moat(0);
@@ -137,20 +129,20 @@ define(lotus, {
       return method.call(method, config.options || {});
     });
   },
+  isModuleIgnored: function(moduleName) {
+    assert(Promise.isFulfilled(initializing), "Must call 'lotus.initialize' first!");
+    return inArray(lotus.config.ignoredModules, moduleName);
+  },
   _initConfig: function() {
-    var path;
+    var configPath;
     if (isType(lotus.config, Object)) {
       return;
     }
-    syncFs = require("io/sync");
-    path = lotus.path + "/lotus.json";
-    assert(syncFs.isFile(path), {
-      path: path,
-      reason: "Failed to find global configuration!"
-    });
-    lotus.config = JSON.parse(syncFs.read(path));
+    configPath = lotus.path + "/lotus.json";
+    assert(fs.isFile(configPath), "Missing global config: '" + configPath + "'");
+    lotus.config = JSON.parse(fs.read(configPath));
   },
-  _loadPlugins: function() {
+  _loadPlugins: Promise.wrap(function() {
     var plugins, tracer;
     assert(lotus.config, "Must call '_initConfig' first!");
     plugins = lotus.config.plugins;
@@ -193,7 +185,7 @@ define(lotus, {
         });
       };
     })(this));
-  },
+  }),
   _initClasses: function(options) {
     var File, Module, frozen, key, ref, value;
     if (lotus.Plugin) {
@@ -238,4 +230,4 @@ define(lotus, {
   }
 });
 
-//# sourceMappingURL=../../map/src/index.map
+//# sourceMappingURL=map/index.map

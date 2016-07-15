@@ -60,8 +60,8 @@ onError = function(error, promise) {
   }
 };
 
-require("Promise")._onUnhandledRejection = onError;
+require("Promise").onUnhandledRejection(onError);
 
 process.on("uncaughtException", onError);
 
-//# sourceMappingURL=../../map/src/global.map
+//# sourceMappingURL=map/global.map
