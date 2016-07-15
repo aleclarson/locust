@@ -7,6 +7,7 @@ assertType = require "assertType"
 sortObject = require "sortObject"
 Promise = require "Promise"
 hasKeys = require "hasKeys"
+inArray = require "in-array"
 Tracer = require "tracer"
 isType = require "isType"
 globby = require "globby"
@@ -60,11 +61,6 @@ type.defineProperties
 
   # The directory to put transformed source files.
   dest:
-    value: null
-    willSet: resolveAbsolutePath
-
-  # The directory to put transformed test files.
-  specDest:
     value: null
     willSet: resolveAbsolutePath
 
@@ -176,6 +172,10 @@ type.defineMethods
     config = JSON.stringify @config, null, 2
     fs.sync.write configPath, config + log.ln
     return
+
+  hasPlugin: (plugin) ->
+    assert @config, "Must first load the module's config file!"
+    return inArray @config.lotus.plugins, plugin
 
 type.defineStatics
 
@@ -296,9 +296,6 @@ Module.addLoaders
       else if isType @config.main, String
         @dest = path.dirname path.join @path, @config.main
 
-      if isType config.specDest, String
-        @specDest = config.specDest
-
   plugins: ->
 
     config = @config.lotus
@@ -333,7 +330,7 @@ Module.addLoaders
         Promise.all promises
 
       .then =>
-        plugin.initModule this, config[plugin.name] or {}
+        plugin.initModule this
 
       .fail (error) ->
         log.moat 1

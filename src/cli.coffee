@@ -16,15 +16,14 @@ module.exports = ->
 
   .then -> lotus.runCommand command, options
 
-  .always (error) ->
+  .fail (error) ->
+    log.moat 1
+    log.red error.constructor.name, ": "
+    log.white error.message
+    log.moat 0
+    log.gray.dim error.stack.split(log.ln).slice(1).join(log.ln)
+    log.moat 1
 
-    if error
-      log.moat 1
-      log.red error.constructor.name, ": "
-      log.white error.message
-      log.moat 0
-      log.gray.dim error.stack.split(log.ln).slice(1).join(log.ln)
-      log.moat 1
-
+  .then ->
     log.cursor.isHidden = no
     process.exit()

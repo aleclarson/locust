@@ -57,13 +57,13 @@ type.definePrototype
     if not @dir.length
       return null
 
+    # Test files are compiled on-the-fly.
+    if @module.spec and @path.startsWith @module.spec
+      return null
+
     if @module.src and @path.startsWith @module.src
       src = @module.src
       dest = @module.dest
-
-    else if @module.spec and @path.startsWith @module.spec
-      src = @module.spec
-      dest = @module.specDest
 
     unless src and dest
       return null
