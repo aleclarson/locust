@@ -205,7 +205,9 @@ define(lotus, {
     };
     for (key in ref) {
       value = ref[key];
-      frozen.define(lotus, key, value);
+      frozen.define(lotus, key, {
+        value: value
+      });
     }
   },
   _commands: Object.create(null),
