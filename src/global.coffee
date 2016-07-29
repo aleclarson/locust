@@ -4,13 +4,11 @@ lotus.register exclude: [ "/node_modules/" ]
 
 require "isDev"
 
-inject = require "Property/inject"
-inject "ReactiveVar", require "ReactiveVar"
-inject "LazyVar", require "LazyVar"
+require "ReactiveVar" # Required for 'Property({ reactive: true })'
+require "LazyVar"     # Required for 'Property({ lazy: Function })'
+require "Event"       # Required for 'Builder::defineEvents'
 
-inject = require "Builder/inject"
-inject "EventMap", require("Event").Map
-
+global.Promise = require "Promise"
 global.prompt = require "prompt"
 global.repl = require "repl"
 global.log = require "log"
@@ -43,18 +41,17 @@ if process.stdin.setRawMode
 # Error handling
 #
 
-onError = (error, promise) ->
-  try
-    throw error if log.isDebug
-    log.moat 1
-    log.red "Error: "
-    log.white error.message
-    log.moat 0
-    log.gray.dim error.stack.split(log.ln).slice(1).join(log.ln)
-    log.moat 1
-  catch error
-    console.log error.stack
+setGlobalErrorHandler = (onError) ->
+  Promise.onUnhandledRejection onError
+  process.on "uncaughtException", onError
 
-require("Promise").onUnhandledRejection onError
-
-process.on "uncaughtException", onError
+setGlobalErrorHandler (error) ->
+  lines = error.message.split log.ln
+  stack = error.stack.split log.ln
+  stack = stack.slice lines.length
+  log.moat 1
+  log.red "Error: "
+  log.white error.message
+  log.moat 0
+  log.gray.dim stack.join log.ln
+  log.moat 1

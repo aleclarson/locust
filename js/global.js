@@ -1,4 +1,4 @@
-var KeyBindings, inject, keys, onError;
+var KeyBindings, keys, setGlobalErrorHandler;
 
 global.lotus = require("lotus-require");
 
@@ -8,15 +8,13 @@ lotus.register({
 
 require("isDev");
 
-inject = require("Property/inject");
+require("ReactiveVar");
 
-inject("ReactiveVar", require("ReactiveVar"));
+require("LazyVar");
 
-inject("LazyVar", require("LazyVar"));
+require("Event");
 
-inject = require("Builder/inject");
-
-inject("EventMap", require("Event").Map);
+global.Promise = require("Promise");
 
 global.prompt = require("prompt");
 
@@ -43,25 +41,22 @@ if (process.stdin.setRawMode) {
   keys.stream = process.stdin;
 }
 
-onError = function(error, promise) {
-  try {
-    if (log.isDebug) {
-      throw error;
-    }
-    log.moat(1);
-    log.red("Error: ");
-    log.white(error.message);
-    log.moat(0);
-    log.gray.dim(error.stack.split(log.ln).slice(1).join(log.ln));
-    return log.moat(1);
-  } catch (error1) {
-    error = error1;
-    return console.log(error.stack);
-  }
+setGlobalErrorHandler = function(onError) {
+  Promise.onUnhandledRejection(onError);
+  return process.on("uncaughtException", onError);
 };
 
-require("Promise").onUnhandledRejection(onError);
-
-process.on("uncaughtException", onError);
+setGlobalErrorHandler(function(error) {
+  var lines, stack;
+  lines = error.message.split(log.ln);
+  stack = error.stack.split(log.ln);
+  stack = stack.slice(lines.length);
+  log.moat(1);
+  log.red("Error: ");
+  log.white(error.message);
+  log.moat(0);
+  log.gray.dim(stack.join(log.ln));
+  return log.moat(1);
+});
 
 //# sourceMappingURL=map/global.map

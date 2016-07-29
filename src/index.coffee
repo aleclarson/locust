@@ -171,7 +171,7 @@ define lotus,
 
     frozen = Property { frozen: yes }
     for key, value of { Plugin, Module, File }
-      frozen.define lotus, key, value
+      frozen.define lotus, key, { value }
     return
 
   _commands: Object.create null
