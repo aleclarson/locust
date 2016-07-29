@@ -7,7 +7,7 @@
   },
   "dependencies": {
     "Builder": "aleclarson/Builder#1.1.0",
-    "Event": "aleclarson/Event#2.0.0",
+    "Event": "aleclarson/Event#2.0.1",
     "LazyVar": "aleclarson/LazyVar#2.1.0",
     "Promise": "aleclarson/Promise#1.0.0",
     "Property": "aleclarson/Property#1.1.1",
