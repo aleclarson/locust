@@ -141,7 +141,9 @@ type.defineMethods
 
     @_crawling[pattern] =
 
-      globby pattern, { nodir: yes, ignore: "**/node_modules/**" }
+      globby pattern,
+        nodir: yes,
+        ignore: options.ignore
 
       .then (filePaths) => # TODO: Handle cancellation properly.
         files = []

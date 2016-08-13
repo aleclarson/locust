@@ -177,7 +177,7 @@ type.defineMethods({
     }
     return this._crawling[pattern] = globby(pattern, {
       nodir: true,
-      ignore: "**/node_modules/**"
+      ignore: options.ignore
     }).then((function(_this) {
       return function(filePaths) {
         var filePath, files, i, len;
