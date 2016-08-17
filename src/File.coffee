@@ -10,14 +10,14 @@ log = require "log"
 
 type = Type "Lotus_File"
 
-type.argumentTypes =
-  filePath: String
+type.defineArgs
+  filePath: String.isRequired
 
-# Initialize after 'argumentTypes' is validated.
-type.willBuild -> @initArguments (args) ->
+type.initArgs (args) ->
+  [filePath] = args
 
-  if not path.isAbsolute args[0]
-    throw Error "Expected an absolute path: '#{args[0]}'"
+  if not path.isAbsolute filePath
+    throw Error "Expected an absolute path: '#{filePath}'"
 
   args[1] ?= lotus.Module.getParent args[0]
   assertType args[1], lotus.Module, "module"
@@ -36,23 +36,23 @@ type.initInstance (filePath, mod) ->
     log.green.dim ")"
     log.moat 1
 
-type.defineValues
+type.defineValues (filePath, mod) ->
 
-  path: (filePath) -> filePath
+  path: filePath
 
-  module: (_, mod) -> mod
+  module: mod
 
-  extension: -> path.extname @path
+  extension: ext = path.extname filePath
 
-  name: -> path.basename @path, @extension
+  name: path.basename filePath, ext
 
-  dir: -> path.relative @module.path, path.dirname @path
+  dir: path.relative mod.path, path.dirname filePath
 
   _reading: null
 
-type.definePrototype
+type.defineGetters
 
-  dest: get: ->
+  dest: ->
 
     if not @dir.length
       return null

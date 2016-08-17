@@ -14,38 +14,20 @@ RESERVED_NAMES = { plugins: yes }
 
 type = Type "Plugin"
 
-type.argumentTypes =
-  name: String
+type.defineArgs
+  name: String.isRequired
 
 type.returnCached (name) ->
   assert not RESERVED_NAMES[name], "A plugin cannot be named '#{name}'!"
   return name
 
-type.defineValues
+type.defineValues (name) ->
 
-  name: (name) -> name
+  name: name
 
   _loading: null
 
 type.defineProperties
-
-  isLoading: get: ->
-    @_loading isnt null
-
-  isLoaded: get: ->
-    Promise.isFulfilled @_loading
-
-  dependencies: get: ->
-    @_assertLoaded()
-    { dependencies } = @_loading.inspect().value
-    return [] unless isType dependencies, Array
-    return dependencies
-
-  globalDependencies: get: ->
-    @_assertLoaded()
-    { globalDependencies } = @_loading.inspect().value
-    return [] unless isType globalDependencies, Array
-    return globalDependencies
 
   _initModule: lazy: ->
     initModule = @_callHook "initModule"
@@ -53,6 +35,26 @@ type.defineProperties
       assert isType(initModule, Function), { plugin: this, reason: "Plugins must return a second function when hooking into 'initModule'!" }
       return initModule
     return emptyFunction
+
+type.defineGetters
+
+  isLoading: ->
+    @_loading isnt null
+
+  isLoaded: ->
+    Promise.isFulfilled @_loading
+
+  dependencies: ->
+    @_assertLoaded()
+    { dependencies } = @_loading.inspect().value
+    return [] unless isType dependencies, Array
+    return dependencies
+
+  globalDependencies: ->
+    @_assertLoaded()
+    { globalDependencies } = @_loading.inspect().value
+    return [] unless isType globalDependencies, Array
+    return globalDependencies
 
 type.defineMethods
 

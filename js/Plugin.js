@@ -26,55 +26,23 @@ RESERVED_NAMES = {
 
 type = Type("Plugin");
 
-type.argumentTypes = {
-  name: String
-};
+type.defineArgs({
+  name: String.isRequired
+});
 
 type.returnCached(function(name) {
   assert(!RESERVED_NAMES[name], "A plugin cannot be named '" + name + "'!");
   return name;
 });
 
-type.defineValues({
-  name: function(name) {
-    return name;
-  },
-  _loading: null
+type.defineValues(function(name) {
+  return {
+    name: name,
+    _loading: null
+  };
 });
 
 type.defineProperties({
-  isLoading: {
-    get: function() {
-      return this._loading !== null;
-    }
-  },
-  isLoaded: {
-    get: function() {
-      return Promise.isFulfilled(this._loading);
-    }
-  },
-  dependencies: {
-    get: function() {
-      var dependencies;
-      this._assertLoaded();
-      dependencies = this._loading.inspect().value.dependencies;
-      if (!isType(dependencies, Array)) {
-        return [];
-      }
-      return dependencies;
-    }
-  },
-  globalDependencies: {
-    get: function() {
-      var globalDependencies;
-      this._assertLoaded();
-      globalDependencies = this._loading.inspect().value.globalDependencies;
-      if (!isType(globalDependencies, Array)) {
-        return [];
-      }
-      return globalDependencies;
-    }
-  },
   _initModule: {
     lazy: function() {
       var initModule;
@@ -88,6 +56,33 @@ type.defineProperties({
       }
       return emptyFunction;
     }
+  }
+});
+
+type.defineGetters({
+  isLoading: function() {
+    return this._loading !== null;
+  },
+  isLoaded: function() {
+    return Promise.isFulfilled(this._loading);
+  },
+  dependencies: function() {
+    var dependencies;
+    this._assertLoaded();
+    dependencies = this._loading.inspect().value.dependencies;
+    if (!isType(dependencies, Array)) {
+      return [];
+    }
+    return dependencies;
+  },
+  globalDependencies: function() {
+    var globalDependencies;
+    this._assertLoaded();
+    globalDependencies = this._loading.inspect().value.globalDependencies;
+    if (!isType(globalDependencies, Array)) {
+      return [];
+    }
+    return globalDependencies;
   }
 });
 

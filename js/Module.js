@@ -34,37 +34,31 @@ fs = require("io");
 
 type = Type("Lotus_Module");
 
-type.argumentTypes = {
-  name: String,
-  path: String
-};
+type.defineArgs({
+  name: String.isRequired,
+  path: String.isRequired
+});
 
-type.initArguments(function(arg) {
+type.initArgs(function(args) {
   var name;
-  name = arg[0];
-  return assert(!Module.cache[name], "Module named '" + name + "' already exists!");
+  name = args[0];
+  if (Module.cache[name]) {
+    throw Error("Module named '" + name + "' already exists!");
+  }
 });
 
 type.returnCached(function(name) {
   return name;
 });
 
-type.defineValues({
-  name: function(name) {
-    return name;
-  },
-  path: function(_, path) {
-    return path;
-  },
-  files: function() {
-    return Object.create(null);
-  },
-  _loading: function() {
-    return Object.create(null);
-  },
-  _crawling: function() {
-    return Object.create(null);
-  }
+type.defineValues(function(name, path) {
+  return {
+    name: name,
+    path: path,
+    files: Object.create(null),
+    _loading: Object.create(null),
+    _crawling: Object.create(null)
+  };
 });
 
 resolveAbsolutePath = function(newValue) {

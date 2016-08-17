@@ -18,20 +18,20 @@ log = require("log");
 
 type = Type("Lotus_File");
 
-type.argumentTypes = {
-  filePath: String
-};
+type.defineArgs({
+  filePath: String.isRequired
+});
 
-type.willBuild(function() {
-  return this.initArguments(function(args) {
-    if (!path.isAbsolute(args[0])) {
-      throw Error("Expected an absolute path: '" + args[0] + "'");
-    }
-    if (args[1] == null) {
-      args[1] = lotus.Module.getParent(args[0]);
-    }
-    return assertType(args[1], lotus.Module, "module");
-  });
+type.initArgs(function(args) {
+  var filePath;
+  filePath = args[0];
+  if (!path.isAbsolute(filePath)) {
+    throw Error("Expected an absolute path: '" + filePath + "'");
+  }
+  if (args[1] == null) {
+    args[1] = lotus.Module.getParent(args[0]);
+  }
+  return assertType(args[1], lotus.Module, "module");
 });
 
 type.returnExisting(function(filePath, mod) {
@@ -51,45 +51,36 @@ type.initInstance(function(filePath, mod) {
   }
 });
 
-type.defineValues({
-  path: function(filePath) {
-    return filePath;
-  },
-  module: function(_, mod) {
-    return mod;
-  },
-  extension: function() {
-    return path.extname(this.path);
-  },
-  name: function() {
-    return path.basename(this.path, this.extension);
-  },
-  dir: function() {
-    return path.relative(this.module.path, path.dirname(this.path));
-  },
-  _reading: null
+type.defineValues(function(filePath, mod) {
+  var ext;
+  return {
+    path: filePath,
+    module: mod,
+    extension: ext = path.extname(filePath),
+    name: path.basename(filePath, ext),
+    dir: path.relative(mod.path, path.dirname(filePath)),
+    _reading: null
+  };
 });
 
-type.definePrototype({
-  dest: {
-    get: function() {
-      var dest, parents, src;
-      if (!this.dir.length) {
-        return null;
-      }
-      if (this.module.spec && this.path.startsWith(this.module.spec)) {
-        return null;
-      }
-      if (this.module.src && this.path.startsWith(this.module.src)) {
-        src = this.module.src;
-        dest = this.module.dest;
-      }
-      if (!(src && dest)) {
-        return null;
-      }
-      parents = path.relative(src, path.dirname(this.path));
-      return path.join(dest, parents, this.name + ".js");
+type.defineGetters({
+  dest: function() {
+    var dest, parents, src;
+    if (!this.dir.length) {
+      return null;
     }
+    if (this.module.spec && this.path.startsWith(this.module.spec)) {
+      return null;
+    }
+    if (this.module.src && this.path.startsWith(this.module.src)) {
+      src = this.module.src;
+      dest = this.module.dest;
+    }
+    if (!(src && dest)) {
+      return null;
+    }
+    parents = path.relative(src, path.dirname(this.path));
+    return path.join(dest, parents, this.name + ".js");
   }
 });
 

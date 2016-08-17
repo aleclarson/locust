@@ -20,27 +20,29 @@ fs = require "io"
 
 type = Type "Lotus_Module"
 
-type.argumentTypes =
-  name: String
-  path: String
+type.defineArgs
+  name: String.isRequired
+  path: String.isRequired
 
-type.initArguments ([ name ]) ->
-  assert not Module.cache[name], "Module named '#{name}' already exists!"
+type.initArgs (args) ->
+  [name] = args
 
-type.returnCached (name) ->
-  return name
+  if Module.cache[name]
+    throw Error "Module named '#{name}' already exists!"
 
-type.defineValues
+type.returnCached (name) -> name
 
-  name: (name) -> name
+type.defineValues (name, path) ->
 
-  path: (_, path) -> path
+  name: name
 
-  files: -> Object.create null
+  path: path
 
-  _loading: -> Object.create null
+  files: Object.create null
 
-  _crawling: -> Object.create null
+  _loading: Object.create null
+
+  _crawling: Object.create null
 
 resolveAbsolutePath = (newValue) ->
   assertType newValue, String
