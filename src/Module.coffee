@@ -11,12 +11,13 @@ inArray = require "in-array"
 Tracer = require "tracer"
 isType = require "isType"
 globby = require "globby"
-assert = require "assert"
 sync = require "sync"
 path = require "path"
 Type = require "Type"
 log = require "log"
 fs = require "io"
+
+moduleCache = Object.create null
 
 type = Type "Lotus_Module"
 
@@ -24,13 +25,9 @@ type.defineArgs
   name: String.isRequired
   path: String.isRequired
 
-type.initArgs (args) ->
-  [name] = args
-
-  if Module.cache[name]
-    throw Error "Module named '#{name}' already exists!"
-
-type.returnCached (name) -> name
+type.initArgs ([ name ]) ->
+  return if not moduleCache[name]
+  throw Error "Module named '#{name}' already exists!"
 
 type.defineValues (name, path) ->
 
@@ -66,15 +63,14 @@ type.defineProperties
     value: null
     willSet: resolveAbsolutePath
 
-type.initInstance ->
-  return if not Module._debug
-  log.moat 1
-  log.green.dim "new Module("
-  log.green "\"#{@name}\""
-  log.green.dim ")"
-  log.moat 1
+#
+# Prototype
+#
 
 type.defineMethods
+
+  getFile: (filePath) ->
+    @files[filePath] ?= lotus.File filePath
 
   load: (names) ->
 
@@ -86,7 +82,7 @@ type.defineMethods
 
       @_loading[name] ?= Promise.try =>
         load = Module._loaders[name]
-        assert isType(load, Function), { mod: this, name, reason: "Invalid loader!" }
+        assertType load, Function
         load.call this
 
       .fail (error) =>
@@ -150,7 +146,7 @@ type.defineMethods
       .then (filePaths) => # TODO: Handle cancellation properly.
         files = []
         for filePath in filePaths
-          files.push lotus.File filePath, this
+          files.push @getFile filePath
         return files
 
       .fail (error) =>
@@ -178,21 +174,25 @@ type.defineMethods
     return
 
   hasPlugin: (plugin) ->
-    assert @config, "Must first load the module's config file!"
-    return inArray @config.lotus.plugins, plugin
+    return inArray @config.lotus.plugins, plugin if @config
+    throw Error "Must first load the module's config file!"
 
 type.defineStatics
-
-  _debug: no
 
   _loaders: Object.create null
 
   _plugins: []
 
+  has: (moduleName) ->
+    moduleCache[moduleName]?
+
+  get: (moduleName, modulePath) ->
+    moduleCache[moduleName] ?= Module moduleName, modulePath
+
   resolve: (filePath) ->
     filePath = path.relative lotus.path, filePath
     name = filePath.slice 0, filePath.indexOf path.sep
-    return Module.cache[name]
+    return moduleCache[name]
 
   load: (moduleName) ->
 
@@ -216,8 +216,7 @@ type.defineStatics
       .assert "Missing config file: '#{configPath}'"
 
     .then ->
-      Module.cache[moduleName] or
-        Module moduleName, modulePath
+      Module.get moduleName, modulePath
 
   # Find modules in the given directory.
   # Import the 'lotus-watch' plugin and
@@ -250,9 +249,10 @@ type.defineStatics
     .then -> mods.array
 
   addLoader: (name, loader) ->
-    assert not @_loaders[name], "Loader named '#{name}' already exists!"
-    @_loaders[name] = loader
-    return
+    if not @_loaders[name]
+      @_loaders[name] = loader
+      return
+    throw Error "Loader named '#{name}' already exists!"
 
   addLoaders: (loaders) ->
     assertType loaders, Object
@@ -263,8 +263,8 @@ type.defineStatics
   addPlugin: (plugin) ->
     assertType plugin, String
     index = @_plugins.indexOf plugin
-    assert index < 0, "Plugin has already been added!"
-    @_plugins.push plugin
+    @_plugins.push plugin if index < 0
+    throw Error "Plugin has already been added!"
     return
 
 type.addMixins lotus._moduleMixins
@@ -324,12 +324,14 @@ Module.addLoaders
         promises = []
 
         sync.each plugin.globalDependencies, (depName) ->
-          assert Plugin._loadedGlobals[depName], { depName, plugin, stack: tracer(), reason: "Missing global plugin dependency!" }
+          return if Plugin._loadedGlobals[depName]
+          throw Error "Missing global plugin dependency!"
 
         sync.each plugin.dependencies, (depName) ->
-          deferred = pluginsLoading[depName]
-          assert deferred, { depName, plugin, stack: tracer(), reason: "Missing local plugin dependency!" }
-          promises.push deferred.promise
+          if deferred = pluginsLoading[depName]
+            promises.push deferred.promise
+            return
+          throw Error "Missing local plugin dependency!"
 
         Promise.all promises
 

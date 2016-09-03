@@ -2,9 +2,10 @@
 require "./global"
 module.exports = lotus
 
+{frozen} = require "Property"
+
 assertTypes = require "assertTypes"
 assertType = require "assertType"
-Property = require "Property"
 Promise = require "Promise"
 inArray = require "in-array"
 Tracer = require "tracer"
@@ -160,18 +161,10 @@ define lotus,
         log.moat 1
 
   _initClasses: (options) ->
-
     return if lotus.Plugin
-
-    Module = require "./Module"
-    Module._debug = options.debugModules
-
-    File = require "./File"
-    File._debug = options.debugFiles
-
-    frozen = Property { frozen: yes }
-    for key, value of { Plugin, Module, File }
-      frozen.define lotus, key, { value }
+    lotus.Plugin = Plugin
+    lotus.Module = require "./Module"
+    lotus.File = require "./File"
     return
 
   _commands: Object.create null

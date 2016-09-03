@@ -29,26 +29,9 @@ type.initArgs(function(args) {
     throw Error("Expected an absolute path: '" + filePath + "'");
   }
   if (args[1] == null) {
-    args[1] = lotus.Module.getParent(args[0]);
+    args[1] = lotus.Module.resolve(args[0]);
   }
   return assertType(args[1], lotus.Module, "module");
-});
-
-type.returnExisting(function(filePath, mod) {
-  return mod.files[filePath];
-});
-
-type.initInstance(function(filePath, mod) {
-  var fileName;
-  mod.files[filePath] = this;
-  if (File._debug) {
-    fileName = path.join(mod.name, path.relative(mod.path, filePath));
-    log.moat(1);
-    log.green.dim("new File(");
-    log.green("\"" + fileName + "\"");
-    log.green.dim(")");
-    return log.moat(1);
-  }
 });
 
 type.defineValues(function(filePath, mod) {
@@ -97,10 +80,6 @@ type.defineMethods({
     }
     return this._reading;
   }
-});
-
-type.defineStatics({
-  _debug: false
 });
 
 type.addMixins(lotus._fileMixins);

@@ -1,4 +1,4 @@
-var Plugin, Promise, RESERVED_NAMES, Tracer, Type, assert, assertType, define, emptyFunction, isType, steal, sync, type;
+var Plugin, Promise, Tracer, Type, assertType, define, emptyFunction, isType, pluginCache, reservedNames, steal, sync, type;
 
 emptyFunction = require("emptyFunction");
 
@@ -12,27 +12,22 @@ isType = require("isType");
 
 define = require("define");
 
-assert = require("assert");
-
 steal = require("steal");
 
 sync = require("sync");
 
 Type = require("Type");
 
-RESERVED_NAMES = {
-  plugins: true
+reservedNames = {
+  plugins: 1
 };
+
+pluginCache = Object.create(null);
 
 type = Type("Plugin");
 
 type.defineArgs({
   name: String.isRequired
-});
-
-type.returnCached(function(name) {
-  assert(!RESERVED_NAMES[name], "A plugin cannot be named '" + name + "'!");
-  return name;
 });
 
 type.defineValues(function(name) {
@@ -48,10 +43,7 @@ type.defineProperties({
       var initModule;
       initModule = this._callHook("initModule");
       if (initModule) {
-        assert(isType(initModule, Function), {
-          plugin: this,
-          reason: "Plugins must return a second function when hooking into 'initModule'!"
-        });
+        assertType(initModule, Function);
         return initModule;
       }
       return emptyFunction;
@@ -98,11 +90,7 @@ type.defineMethods({
           throw Error("Cannot find plugin: '" + _this.name + "'");
         }
         plugin = require(_this.name);
-        assert(isType(plugin, Object), {
-          name: _this.name,
-          plugin: plugin,
-          reason: "Plugins must export an object!"
-        });
+        assertType(plugin, Object);
         return plugin;
       };
     })(this));
@@ -142,10 +130,10 @@ type.defineMethods({
     lotus._fileMixins.push(initType);
   },
   _assertLoaded: function() {
-    return assert(this.isLoaded, {
-      plugin: this,
-      reason: "Must call 'plugin.load' first!"
-    });
+    if (this.isLoaded) {
+      return;
+    }
+    throw Error("Must call 'plugin.load' first!");
   },
   _callHook: function(name, context, args) {
     var hook, loaded;
@@ -161,6 +149,15 @@ type.defineMethods({
 
 type.defineStatics({
   _loadedGlobals: Object.create(null),
+  get: function(name) {
+    if (!pluginCache[name]) {
+      if (reservedNames[name]) {
+        throw Error("A plugin cannot be named '" + name + "'!");
+      }
+      pluginCache[name] = Plugin(name);
+    }
+    return pluginCache[name];
+  },
   load: function(plugins, iterator) {
     var pluginsLoading, tracer;
     assertType(plugins, Array);
@@ -169,7 +166,7 @@ type.defineStatics({
     pluginsLoading = Object.create(null);
     return Promise.chain(plugins, function(plugin) {
       if (isType(plugin, String)) {
-        plugin = Plugin(plugin);
+        plugin = Plugin.get(plugin);
       }
       if (!isType(plugin, Plugin)) {
         return;
@@ -178,8 +175,10 @@ type.defineStatics({
       return Promise["try"](function() {
         var loading;
         loading = iterator(plugin, pluginsLoading);
-        assert(plugin._loading, "Must call 'plugin.load' in the iterator!");
-        return loading;
+        if (plugin._loading) {
+          return loading;
+        }
+        throw Error("Must call 'plugin.load' in the iterator!");
       }).then(function(result) {
         pluginsLoading[plugin.name].resolve(result);
         return result;

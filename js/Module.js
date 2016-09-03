@@ -1,4 +1,4 @@
-var Module, Promise, SortedArray, Tracer, Type, assert, assertType, emptyFunction, fs, globby, hasKeys, inArray, isType, log, path, resolveAbsolutePath, sortObject, sync, type;
+var Module, Promise, SortedArray, Tracer, Type, assertType, emptyFunction, fs, globby, hasKeys, inArray, isType, log, moduleCache, path, resolveAbsolutePath, sortObject, sync, type;
 
 emptyFunction = require("emptyFunction");
 
@@ -20,8 +20,6 @@ isType = require("isType");
 
 globby = require("globby");
 
-assert = require("assert");
-
 sync = require("sync");
 
 path = require("path");
@@ -32,6 +30,8 @@ log = require("log");
 
 fs = require("io");
 
+moduleCache = Object.create(null);
+
 type = Type("Lotus_Module");
 
 type.defineArgs({
@@ -39,16 +39,13 @@ type.defineArgs({
   path: String.isRequired
 });
 
-type.initArgs(function(args) {
+type.initArgs(function(arg) {
   var name;
-  name = args[0];
-  if (Module.cache[name]) {
-    throw Error("Module named '" + name + "' already exists!");
+  name = arg[0];
+  if (!moduleCache[name]) {
+    return;
   }
-});
-
-type.returnCached(function(name) {
-  return name;
+  throw Error("Module named '" + name + "' already exists!");
 });
 
 type.defineValues(function(name, path) {
@@ -84,18 +81,11 @@ type.defineProperties({
   }
 });
 
-type.initInstance(function() {
-  if (!Module._debug) {
-    return;
-  }
-  log.moat(1);
-  log.green.dim("new Module(");
-  log.green("\"" + this.name + "\"");
-  log.green.dim(")");
-  return log.moat(1);
-});
-
 type.defineMethods({
+  getFile: function(filePath) {
+    var base;
+    return (base = this.files)[filePath] != null ? base[filePath] : base[filePath] = lotus.File(filePath);
+  },
   load: function(names) {
     var tracer;
     assertType(names, Array);
@@ -106,11 +96,7 @@ type.defineMethods({
         return (base = _this._loading)[name] != null ? base[name] : base[name] = Promise["try"](function() {
           var load;
           load = Module._loaders[name];
-          assert(isType(load, Function), {
-            mod: _this,
-            name: name,
-            reason: "Invalid loader!"
-          });
+          assertType(load, Function);
           return load.call(_this);
         }).fail(function(error) {
           _this._loading[name] = null;
@@ -178,7 +164,7 @@ type.defineMethods({
         files = [];
         for (i = 0, len = filePaths.length; i < len; i++) {
           filePath = filePaths[i];
-          files.push(lotus.File(filePath, _this));
+          files.push(_this.getFile(filePath));
         }
         return files;
       };
@@ -222,20 +208,27 @@ type.defineMethods({
     fs.sync.write(configPath, config + log.ln);
   },
   hasPlugin: function(plugin) {
-    assert(this.config, "Must first load the module's config file!");
-    return inArray(this.config.lotus.plugins, plugin);
+    if (this.config) {
+      return inArray(this.config.lotus.plugins, plugin);
+    }
+    throw Error("Must first load the module's config file!");
   }
 });
 
 type.defineStatics({
-  _debug: false,
   _loaders: Object.create(null),
   _plugins: [],
+  has: function(moduleName) {
+    return moduleCache[moduleName] != null;
+  },
+  get: function(moduleName, modulePath) {
+    return moduleCache[moduleName] != null ? moduleCache[moduleName] : moduleCache[moduleName] = Module(moduleName, modulePath);
+  },
   resolve: function(filePath) {
     var name;
     filePath = path.relative(lotus.path, filePath);
     name = filePath.slice(0, filePath.indexOf(path.sep));
-    return Module.cache[name];
+    return moduleCache[name];
   },
   load: function(moduleName) {
     var modulePath;
@@ -253,7 +246,7 @@ type.defineStatics({
       configPath = path.join(modulePath, "package.json");
       return fs.async.isFile(configPath).assert("Missing config file: '" + configPath + "'");
     }).then(function() {
-      return Module.cache[moduleName] || Module(moduleName, modulePath);
+      return Module.get(moduleName, modulePath);
     });
   },
   crawl: function(dirPath) {
@@ -288,8 +281,11 @@ type.defineStatics({
     });
   },
   addLoader: function(name, loader) {
-    assert(!this._loaders[name], "Loader named '" + name + "' already exists!");
-    this._loaders[name] = loader;
+    if (!this._loaders[name]) {
+      this._loaders[name] = loader;
+      return;
+    }
+    throw Error("Loader named '" + name + "' already exists!");
   },
   addLoaders: function(loaders) {
     var loader, name;
@@ -303,8 +299,10 @@ type.defineStatics({
     var index;
     assertType(plugin, String);
     index = this._plugins.indexOf(plugin);
-    assert(index < 0, "Plugin has already been added!");
-    this._plugins.push(plugin);
+    if (index < 0) {
+      this._plugins.push(plugin);
+    }
+    throw Error("Plugin has already been added!");
   }
 });
 
@@ -364,23 +362,18 @@ Module.addLoaders({
           var promises;
           promises = [];
           sync.each(plugin.globalDependencies, function(depName) {
-            return assert(Plugin._loadedGlobals[depName], {
-              depName: depName,
-              plugin: plugin,
-              stack: tracer(),
-              reason: "Missing global plugin dependency!"
-            });
+            if (Plugin._loadedGlobals[depName]) {
+              return;
+            }
+            throw Error("Missing global plugin dependency!");
           });
           sync.each(plugin.dependencies, function(depName) {
             var deferred;
-            deferred = pluginsLoading[depName];
-            assert(deferred, {
-              depName: depName,
-              plugin: plugin,
-              stack: tracer(),
-              reason: "Missing local plugin dependency!"
-            });
-            return promises.push(deferred.promise);
+            if (deferred = pluginsLoading[depName]) {
+              promises.push(deferred.promise);
+              return;
+            }
+            throw Error("Missing local plugin dependency!");
           });
           return Promise.all(promises);
         }).then(function() {

@@ -5,21 +5,17 @@ Promise = require "Promise"
 Tracer = require "tracer"
 isType = require "isType"
 define = require "define"
-assert = require "assert"
 steal = require "steal"
 sync = require "sync"
 Type = require "Type"
 
-RESERVED_NAMES = { plugins: yes }
+reservedNames = {plugins:1}
+pluginCache = Object.create null
 
 type = Type "Plugin"
 
 type.defineArgs
   name: String.isRequired
-
-type.returnCached (name) ->
-  assert not RESERVED_NAMES[name], "A plugin cannot be named '#{name}'!"
-  return name
 
 type.defineValues (name) ->
 
@@ -32,7 +28,7 @@ type.defineProperties
   _initModule: lazy: ->
     initModule = @_callHook "initModule"
     if initModule
-      assert isType(initModule, Function), { plugin: this, reason: "Plugins must return a second function when hooking into 'initModule'!" }
+      assertType initModule, Function
       return initModule
     return emptyFunction
 
@@ -69,7 +65,7 @@ type.defineMethods
         throw Error "Cannot find plugin: '#{@name}'"
 
       plugin = require @name
-      assert isType(plugin, Object), { @name, plugin, reason: "Plugins must export an object!" }
+      assertType plugin, Object
       return plugin
 
   initCommands: (commands) ->
@@ -101,7 +97,8 @@ type.defineMethods
     return
 
   _assertLoaded: ->
-    assert @isLoaded, { plugin: this, reason: "Must call 'plugin.load' first!" }
+    return if @isLoaded
+    throw Error "Must call 'plugin.load' first!"
 
   _callHook: (name, context, args) ->
     @_assertLoaded()
@@ -115,8 +112,14 @@ type.defineStatics
 
   _loadedGlobals: Object.create null
 
-  load: (plugins, iterator) ->
+  get: (name) ->
+    unless pluginCache[name]
+      if reservedNames[name]
+        throw Error "A plugin cannot be named '#{name}'!"
+      pluginCache[name] = Plugin name
+    return pluginCache[name]
 
+  load: (plugins, iterator) ->
     assertType plugins, Array
     assertType iterator, Function
 
@@ -127,15 +130,15 @@ type.defineStatics
     Promise.chain plugins, (plugin) ->
 
       if isType plugin, String
-        plugin = Plugin plugin
+        plugin = Plugin.get plugin
 
       return if not isType plugin, Plugin
       pluginsLoading[plugin.name] = Promise.defer()
 
       Promise.try ->
         loading = iterator plugin, pluginsLoading
-        assert plugin._loading, "Must call 'plugin.load' in the iterator!"
-        return loading
+        return loading if plugin._loading
+        throw Error "Must call 'plugin.load' in the iterator!"
 
       .then (result) ->
         pluginsLoading[plugin.name].resolve result

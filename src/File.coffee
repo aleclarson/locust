@@ -19,22 +19,8 @@ type.initArgs (args) ->
   if not path.isAbsolute filePath
     throw Error "Expected an absolute path: '#{filePath}'"
 
-  args[1] ?= lotus.Module.getParent args[0]
+  args[1] ?= lotus.Module.resolve args[0]
   assertType args[1], lotus.Module, "module"
-
-type.returnExisting (filePath, mod) -> mod.files[filePath]
-
-type.initInstance (filePath, mod) ->
-
-  mod.files[filePath] = this
-
-  if File._debug
-    fileName = path.join mod.name, path.relative mod.path, filePath
-    log.moat 1
-    log.green.dim "new File("
-    log.green "\"#{fileName}\""
-    log.green.dim ")"
-    log.moat 1
 
 type.defineValues (filePath, mod) ->
 
@@ -83,8 +69,6 @@ type.defineMethods
     if options.sync
       return @_reading.inspect().value
     return @_reading
-
-type.defineStatics { _debug: no }
 
 type.addMixins lotus._fileMixins
 

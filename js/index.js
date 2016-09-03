@@ -1,14 +1,14 @@
-var Plugin, Promise, Property, Tracer, assert, assertType, assertTypes, define, fs, inArray, initializing, isType, sync;
+var Plugin, Promise, Tracer, assert, assertType, assertTypes, define, frozen, fs, inArray, initializing, isType, sync;
 
 require("./global");
 
 module.exports = lotus;
 
+frozen = require("Property").frozen;
+
 assertTypes = require("assertTypes");
 
 assertType = require("assertType");
-
-Property = require("Property");
 
 Promise = require("Promise");
 
@@ -187,28 +187,12 @@ define(lotus, {
     })(this));
   }),
   _initClasses: function(options) {
-    var File, Module, frozen, key, ref, value;
     if (lotus.Plugin) {
       return;
     }
-    Module = require("./Module");
-    Module._debug = options.debugModules;
-    File = require("./File");
-    File._debug = options.debugFiles;
-    frozen = Property({
-      frozen: true
-    });
-    ref = {
-      Plugin: Plugin,
-      Module: Module,
-      File: File
-    };
-    for (key in ref) {
-      value = ref[key];
-      frozen.define(lotus, key, {
-        value: value
-      });
-    }
+    lotus.Plugin = Plugin;
+    lotus.Module = require("./Module");
+    lotus.File = require("./File");
   },
   _commands: Object.create(null),
   _printCommandList: function() {
