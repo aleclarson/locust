@@ -289,7 +289,10 @@ Module.addLoaders
 
     .then (json) =>
 
-      @config = JSON.parse json
+      try @config = JSON.parse json
+      catch error
+        throw Error "Failed to parse JSON:\n" + configPath + "\n\n" + error.stack
+
       config = @config.lotus or {}
 
       if isType config.src, String
