@@ -190,8 +190,12 @@ type.defineStatics
     moduleCache[moduleName] ?= Module moduleName, modulePath
 
   resolve: (filePath) ->
-    filePath = path.relative lotus.path, filePath
-    name = filePath.slice 0, filePath.indexOf path.sep
+    packageRoot = filePath
+    loop
+      packageRoot = path.dirname packageRoot
+      packageJson = path.join packageRoot, "package.json"
+      break if fs.sync.exists packageJson
+    name = path.basename packageRoot
     return moduleCache[name]
 
   load: (moduleName) ->
