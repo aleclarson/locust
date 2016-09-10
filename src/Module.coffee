@@ -110,7 +110,7 @@ type.defineMethods
 
     if Array.isArray pattern
 
-      return Promise.map pattern, (pattern) =>
+      return Promise.all pattern, (pattern) =>
         @crawl pattern, options
 
       .then (filesByPattern) ->
