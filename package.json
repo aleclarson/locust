@@ -27,8 +27,6 @@
     "log": "aleclarson/log#1.0.0",
     "lotus-require": "aleclarson/lotus-require#3.1.0",
     "minimist": "~0.0.8",
-    "prompt": "aleclarson/prompt#1.0.0",
-    "repl": "aleclarson/repl#1.0.0",
     "sortObject": "aleclarson/sortObject#1.0.0",
     "sorted-array": "aleclarson/sorted-array#2.0.0",
     "steal": "aleclarson/steal#1.1.0",
