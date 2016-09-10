@@ -9,33 +9,14 @@ require "LazyVar"     # Required for 'Property({ lazy: Function })'
 require "Event"       # Required for 'Builder::defineEvents'
 
 global.Promise = require "Promise"
-global.prompt = require "prompt"
-global.repl = require "repl"
 global.log = require "log"
 
 #
 # Key bindings
 #
 
-if process.stdin.setRawMode
-
-  KeyBindings = require "key-bindings"
-
-  keys = KeyBindings
-
-    "c+ctrl": ->
-      log.moat 1
-      log.red "CTRL+C"
-      log.moat 1
-      process.exit()
-
-    "x+ctrl": ->
-      log.moat 1
-      log.red "CTRL+X"
-      log.moat 1
-      process.exit()
-
-  keys.stream = process.stdin
+KeyBindings = require "key-bindings"
+global.__keys = KeyBindings process.stdin
 
 #
 # Error handling
