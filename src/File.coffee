@@ -10,49 +10,35 @@ log = require "log"
 
 type = Type "Lotus_File"
 
-type.argumentTypes =
-  filePath: String
+type.defineArgs
+  filePath: String.isRequired
 
-# Initialize after 'argumentTypes' is validated.
-type.willBuild -> @initArguments (args) ->
+type.initArgs (args) ->
+  [filePath] = args
 
-  if not path.isAbsolute args[0]
-    throw Error "Expected an absolute path: '#{args[0]}'"
+  if not path.isAbsolute filePath
+    throw Error "Expected an absolute path: '#{filePath}'"
 
-  args[1] ?= lotus.Module.getParent args[0]
+  args[1] ?= lotus.Module.resolve args[0]
   assertType args[1], lotus.Module, "module"
 
-type.returnExisting (filePath, mod) -> mod.files[filePath]
+type.defineValues (filePath, mod) ->
 
-type.initInstance (filePath, mod) ->
+  path: filePath
 
-  mod.files[filePath] = this
+  module: mod
 
-  if File._debug
-    fileName = path.join mod.name, path.relative mod.path, filePath
-    log.moat 1
-    log.green.dim "new File("
-    log.green "\"#{fileName}\""
-    log.green.dim ")"
-    log.moat 1
+  extension: ext = path.extname filePath
 
-type.defineValues
+  name: path.basename filePath, ext
 
-  path: (filePath) -> filePath
-
-  module: (_, mod) -> mod
-
-  extension: -> path.extname @path
-
-  name: -> path.basename @path, @extension
-
-  dir: -> path.relative @module.path, path.dirname @path
+  dir: path.relative mod.path, path.dirname filePath
 
   _reading: null
 
-type.definePrototype
+type.defineGetters
 
-  dest: get: ->
+  dest: ->
 
     if not @dir.length
       return null
@@ -83,8 +69,6 @@ type.defineMethods
     if options.sync
       return @_reading.inspect().value
     return @_reading
-
-type.defineStatics { _debug: no }
 
 type.addMixins lotus._fileMixins
 

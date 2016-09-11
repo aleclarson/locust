@@ -2,14 +2,14 @@
 require "./global"
 module.exports = lotus
 
+{frozen} = require "Property"
+
 assertTypes = require "assertTypes"
 assertType = require "assertType"
-Property = require "Property"
 Promise = require "Promise"
 inArray = require "in-array"
 Tracer = require "tracer"
 isType = require "isType"
-assert = require "assert"
 define = require "define"
 sync = require "sync"
 fs = require "io/sync"
@@ -28,7 +28,8 @@ define lotus,
 
   runCommand: (command, options = {}) ->
 
-    assert Promise.isFulfilled(initializing), "Must call 'lotus.initialize' first!"
+    if not Promise.isFulfilled initializing
+      throw Error "Must call 'lotus.initialize' first!"
 
     if not isType command, String
       log.moat 1
@@ -70,8 +71,11 @@ define lotus,
       command: String
       options: Object.Maybe
 
-    assert config.dir[0] is "/", "'config.dir' must be an absolute path!"
-    assert fs.isDir(config.dir), "'config.dir' must be an existing directory!"
+    if config.dir[0] isnt "/"
+      throw Error "'config.dir' must be an absolute path!"
+
+    if not fs.isDir config.dir
+      throw Error "'config.dir' must be an existing directory!"
 
     unless isType methodName, String
       log.moat 1
@@ -112,20 +116,24 @@ define lotus,
       method.call method, config.options or {}
 
   isModuleIgnored: (moduleName) ->
-    assert Promise.isFulfilled(initializing), "Must call 'lotus.initialize' first!"
+    if not Promise.isFulfilled initializing
+      throw Error "Must call 'lotus.initialize' first!"
     return inArray lotus.config.ignoredModules, moduleName
 
   _initConfig: ->
     return if isType lotus.config, Object
     configPath = lotus.path + "/lotus.json"
-    assert fs.isFile(configPath), "Missing global config: '#{configPath}'"
+    if not fs.isFile configPath
+      throw Error "Missing global config: '#{configPath}'"
     lotus.config = JSON.parse fs.read configPath
     return
 
   _loadPlugins: Promise.wrap ->
 
-    assert lotus.config, "Must call '_initConfig' first!"
-    { plugins } = lotus.config
+    if not lotus.config
+      throw Error "Must call '_initConfig' first!"
+
+    {plugins} = lotus.config
 
     return unless Array.isArray plugins
     return if plugins.length is 0
@@ -135,21 +143,20 @@ define lotus,
     Plugin.load plugins, (plugin, pluginsLoading) =>
 
       plugin.load().then ->
-
         promises = []
-
         sync.each plugin.globalDependencies, (depName) ->
-          deferred = pluginsLoading[depName]
-          assert deferred, { depName, plugin, stack: tracer(), reason: "Missing local plugin dependency!" }
-          promises.push deferred.promise
-
-        Promise.all promises
+          if deferred = pluginsLoading[depName]
+            promises.push deferred.promise
+            return
+          throw Error "Missing local plugin dependency!"
+        return Promise.all promises
 
       .then =>
         plugin.initCommands @_commands
         plugin.initModuleType()
         plugin.initFileType()
         Plugin._loadedGlobals[plugin.name] = yes
+        return
 
       .fail (error) ->
         log.moat 1
@@ -158,20 +165,13 @@ define lotus,
         log.moat 0
         log.gray.dim error.stack
         log.moat 1
+        return
 
   _initClasses: (options) ->
-
     return if lotus.Plugin
-
-    Module = require "./Module"
-    Module._debug = options.debugModules
-
-    File = require "./File"
-    File._debug = options.debugFiles
-
-    frozen = Property { frozen: yes }
-    for key, value of { Plugin, Module, File }
-      frozen.define lotus, key, { value }
+    lotus.Plugin = Plugin
+    lotus.Module = require "./Module"
+    lotus.File = require "./File"
     return
 
   _commands: Object.create null

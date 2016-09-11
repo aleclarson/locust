@@ -1,19 +1,17 @@
 {
   "name": "lotus",
-  "version": "3.1.1",
+  "version": "3.2.0",
   "main": "js/index",
   "bin": {
     "lotus": "./bin/lotus"
   },
   "dependencies": {
-    "Builder": "aleclarson/Builder#1.1.0",
     "Event": "aleclarson/Event#2.0.1",
     "LazyVar": "aleclarson/LazyVar#2.1.0",
     "Promise": "aleclarson/Promise#1.0.0",
     "Property": "aleclarson/Property#1.1.1",
     "ReactiveVar": "aleclarson/ReactiveVar#2.0.0",
     "Type": "aleclarson/Type#1.1.0",
-    "assert": "aleclarson/assert#1.0.0",
     "assertType": "aleclarson/assertType#2.0.0",
     "assertTypes": "aleclarson/assertTypes#2.0.0",
     "define": "aleclarson/define#1.0.0",
@@ -28,8 +26,6 @@
     "log": "aleclarson/log#1.0.0",
     "lotus-require": "aleclarson/lotus-require#3.1.0",
     "minimist": "~0.0.8",
-    "prompt": "aleclarson/prompt#1.0.0",
-    "repl": "aleclarson/repl#1.0.0",
     "sortObject": "aleclarson/sortObject#1.0.0",
     "sorted-array": "aleclarson/sorted-array#2.0.0",
     "steal": "aleclarson/steal#1.1.0",

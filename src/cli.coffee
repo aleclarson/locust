@@ -4,6 +4,12 @@ module.exports = ->
   require "./global"
   require "./index"
 
+  {exit} = process
+  process.exit = ->
+    log.onceFlushed ->
+      console.log log.color.gray.dim "Exiting..."
+      exit.call process
+
   log.indent = 2
   log.moat 1
 
@@ -18,12 +24,8 @@ module.exports = ->
 
   .fail (error) ->
     log.moat 1
-    log.red error.constructor.name, ": "
-    log.white error.message
-    log.moat 0
-    log.gray.dim error.stack.split(log.ln).slice(1).join(log.ln)
+    log.red error.stack
     log.moat 1
 
   .then ->
-    log.cursor.isHidden = no
     process.exit()
