@@ -3,7 +3,14 @@
   "version": "3.2.0",
   "main": "js/index",
   "bin": {
-    "lotus": "./bin/lotus"
+    "lotus": "bin/lotus"
+  },
+  "plugins": [
+    "lotus-coffee"
+  ],
+  "scripts": {
+    "build": "coffee -cb -o js src",
+    "postinstall": "postinstall-build js 'npm run build'"
   },
   "dependencies": {
     "Event": "aleclarson/Event#2.0.1",
@@ -26,25 +33,17 @@
     "log": "aleclarson/log#1.0.0",
     "lotus-require": "aleclarson/lotus-require#3.1.0",
     "minimist": "~0.0.8",
+    "postinstall-build": "0.2.x",
     "sortObject": "aleclarson/sortObject#1.0.0",
     "sorted-array": "aleclarson/sorted-array#2.0.0",
     "steal": "aleclarson/steal#1.1.0",
     "sync": "aleclarson/sync#1.0.0",
     "tracer": "aleclarson/tracer#1.0.0"
   },
-  "lotus": {
-    "plugins": [
-      "lotus-coffee"
-    ],
-    "implicitDependencies": [
-      "path"
-    ]
+  "devDependencies": {
+    "coffee-script": "1.9.x"
   },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/aleclarson/lotus.git"
-  },
-  "licenses": [
-    "MIT"
+  "implicitDependencies": [
+    "path"
   ]
 }
