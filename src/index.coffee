@@ -8,7 +8,6 @@ assertTypes = require "assertTypes"
 assertType = require "assertType"
 Promise = require "Promise"
 inArray = require "in-array"
-Tracer = require "tracer"
 isType = require "isType"
 define = require "define"
 sync = require "sync"
@@ -120,6 +119,12 @@ define lotus,
       throw Error "Must call 'lotus.initialize' first!"
     return inArray lotus.config.ignoredModules, moduleName
 
+define lotus,
+
+  _moduleMixins: []
+
+  _fileMixins: []
+
   _initConfig: ->
     return if isType lotus.config, Object
     configPath = lotus.path + "/lotus.json"
@@ -128,44 +133,20 @@ define lotus,
     lotus.config = JSON.parse fs.read configPath
     return
 
-  _loadPlugins: Promise.wrap ->
+  _loadPlugins: ->
 
     if not lotus.config
       throw Error "Must call '_initConfig' first!"
 
     {plugins} = lotus.config
+    if not Array.isArray plugins
+      return Promise()
 
-    return unless Array.isArray plugins
-    return if plugins.length is 0
-
-    tracer = Tracer "lotus._loadPlugins()"
-
-    Plugin.load plugins, (plugin, pluginsLoading) =>
-
-      plugin.load().then ->
-        promises = []
-        sync.each plugin.globalDependencies, (depName) ->
-          if deferred = pluginsLoading[depName]
-            promises.push deferred.promise
-            return
-          throw Error "Missing local plugin dependency!"
-        return Promise.all promises
-
-      .then =>
-        plugin.initCommands @_commands
-        plugin.initModuleType()
-        plugin.initFileType()
-        Plugin._loadedGlobals[plugin.name] = yes
-        return
-
-      .fail (error) ->
-        log.moat 1
-        log.red "Plugin error: "
-        log.white plugin.name
-        log.moat 0
-        log.gray.dim error.stack
-        log.moat 1
-        return
+    Plugin.loadGlobals plugins, (plugin) =>
+      plugin.initCommands @_commands
+      plugin.initModuleType()
+      plugin.initFileType()
+      return
 
   _initClasses: (options) ->
     return if lotus.Plugin

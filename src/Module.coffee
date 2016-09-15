@@ -8,7 +8,6 @@ sortObject = require "sortObject"
 Promise = require "Promise"
 hasKeys = require "hasKeys"
 inArray = require "in-array"
-Tracer = require "tracer"
 isType = require "isType"
 globby = require "globby"
 sync = require "sync"
@@ -75,8 +74,6 @@ type.defineMethods
   load: (names) ->
 
     assertType names, Array
-
-    tracer = Tracer "module.load()"
 
     return Promise.chain names, (name) =>
 
@@ -162,11 +159,11 @@ type.defineMethods
     { dependencies, devDependencies } = @config
 
     if hasKeys dependencies
-      @config.dependencies = sortObject dependencies, (a, b) -> if a.key > b.key then 1 else -1
+      @config.dependencies = sortObject dependencies
     else delete @config.dependencies
 
     if hasKeys devDependencies
-      @config.devDependencies = sortObject devDependencies, (a, b) -> if a.key > b.key then 1 else -1
+      @config.devDependencies = sortObject devDependencies
     else delete @config.devDependencies
 
     config = JSON.stringify @config, null, 2
@@ -174,7 +171,7 @@ type.defineMethods
     return
 
   hasPlugin: (plugin) ->
-    return inArray @config.lotus.plugins, plugin if @config
+    return inArray @config.plugins, plugin if @config
     throw Error "Must first load the module's config file!"
 
 type.defineStatics
@@ -293,16 +290,14 @@ Module.addLoaders
       catch error
         throw Error "Failed to parse JSON:\n" + configPath + "\n\n" + error.stack
 
-      config = @config.lotus or {}
+      if isType @config.src, String
+        @src = @config.src
 
-      if isType config.src, String
-        @src = config.src
+      if isType @config.spec, String
+        @spec = @config.spec
 
-      if isType config.spec, String
-        @spec = config.spec
-
-      if isType config.dest, String
-        @dest = config.dest
+      if isType @config.dest, String
+        @dest = @config.dest
 
       else if isType @config.main, String
         @dest = path.dirname path.join @path, @config.main
@@ -310,45 +305,13 @@ Module.addLoaders
   plugins: ->
 
     config = @config.lotus
-
     return unless isType config, Object
 
-    plugins = [].concat config.plugins
+    plugins = []
+      .concat config.plugins or []
+      .concat @config.plugins or []
+      .concat Module._plugins
 
-    if Module._plugins.length
-      for name in Module._plugins
-        continue if 0 <= plugins.indexOf name
-        plugins.push name
-
-    { Plugin } = lotus
-
-    tracer = Tracer "Plugin.load()"
-
-    Plugin.load plugins, (plugin, pluginsLoading) =>
-
-      plugin.load().then ->
-
-        promises = []
-
-        sync.each plugin.globalDependencies, (depName) ->
-          return if Plugin._loadedGlobals[depName]
-          throw Error "Missing global plugin dependency!"
-
-        sync.each plugin.dependencies, (depName) ->
-          if deferred = pluginsLoading[depName]
-            promises.push deferred.promise
-            return
-          throw Error "Missing local plugin dependency!"
-
-        Promise.all promises
-
-      .then =>
-        plugin.initModule this
-
-      .fail (error) ->
-        log.moat 1
-        log.red "Plugin error: "
-        log.white plugin.name
-        log.moat 0
-        log.gray.dim error.stack
-        log.moat 1
+    mod = this
+    lotus.Plugin.load plugins, (plugin) ->
+      return plugin.initModule mod

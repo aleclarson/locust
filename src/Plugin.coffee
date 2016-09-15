@@ -2,7 +2,6 @@
 emptyFunction = require "emptyFunction"
 assertType = require "assertType"
 Promise = require "Promise"
-Tracer = require "tracer"
 isType = require "isType"
 define = require "define"
 steal = require "steal"
@@ -21,7 +20,9 @@ type.defineValues (name) ->
 
   name: name
 
-  _loading: null
+  _loaded: null
+
+  _deps: null
 
 type.defineProperties
 
@@ -34,39 +35,17 @@ type.defineProperties
 
 type.defineGetters
 
-  isLoading: ->
-    @_loading isnt null
-
-  isLoaded: ->
-    Promise.isFulfilled @_loading
+  isLoaded: -> @_loaded isnt null
 
   dependencies: ->
-    @_assertLoaded()
-    { dependencies } = @_loading.inspect().value
-    return [] unless isType dependencies, Array
-    return dependencies
+    return null if not @_loaded
+    return @_loaded.dependencies or []
 
   globalDependencies: ->
-    @_assertLoaded()
-    { globalDependencies } = @_loading.inspect().value
-    return [] unless isType globalDependencies, Array
-    return globalDependencies
+    return null if not @_loaded
+    return @_loaded.globalDependencies or []
 
 type.defineMethods
-
-  load: ->
-
-    unless Promise.isRejected @_loading
-      return @_loading
-
-    @_loading = Promise.try =>
-
-      unless lotus.isFile @name
-        throw Error "Cannot find plugin: '#{@name}'"
-
-      plugin = require @name
-      assertType plugin, Object
-      return plugin
 
   initCommands: (commands) ->
 
@@ -96,21 +75,76 @@ type.defineMethods
     lotus._fileMixins.push initType
     return
 
-  _assertLoaded: ->
-    return if @isLoaded
-    throw Error "Must call 'plugin.load' first!"
-
   _callHook: (name, context, args) ->
-    @_assertLoaded()
-    loaded = @_loading.inspect().value
-    if isType loaded[name], Function
-      hook = steal loaded, name
+
+    if not @isLoaded
+      throw Error "Must call 'plugin.load' first!"
+
+    if hook = @_loaded[name]
+      assertType hook, Function
       return hook.call context, args
+
     return null
 
-type.defineStatics
+  _load: (config) ->
 
-  _loadedGlobals: Object.create null
+    if @_loaded
+      return @_loaded
+
+    Promise.try =>
+
+      if not lotus.isFile @name
+        throw Error "Plugin does not exist: '#{@name}'"
+
+      plugin = require @name
+
+      if not isType plugin, Object
+        throw TypeError "Plugin must return an object: '#{@name}'"
+
+      @_loaded = plugin
+      @_loadDeps plugin, config
+
+      .then => config.loadPlugin this
+
+      .then =>
+
+        if config.global
+          Plugin._loadedGlobals[@name] = plugin
+
+        loading = config.loadingPlugins[@name]
+        loading.resolve this
+        return plugin
+
+    .fail (error) =>
+      log.moat 1
+      log.red "Plugin failed to load: "
+      log.white @name
+      log.moat 0
+      log.gray error.stack
+      log.moat 1
+      return
+
+  _loadDeps: (plugin, config) ->
+
+    deps = []
+
+    if not config.global
+      if Array.isArray plugin.globalDependencies
+        for dep in plugin.globalDependencies
+          continue if Plugin._loadedGlobals[dep]
+          throw Error "Unmet global plugin dependency: #{dep}"
+
+    if Array.isArray plugin.dependencies
+      for dep in plugin.dependencies
+        loading = config.loadingPlugins[dep]
+        if loading
+          deps.push loading.promise
+          return
+        throw Error "Unmet local plugin dependency: #{dep}"
+
+    return Promise.all deps
+
+type.defineStatics
 
   get: (name) ->
     unless pluginCache[name]
@@ -119,44 +153,33 @@ type.defineStatics
       pluginCache[name] = Plugin name
     return pluginCache[name]
 
-  load: (plugins, iterator) ->
+  load: (plugins, loadPlugin) ->
     assertType plugins, Array
-    assertType iterator, Function
+    assertType loadPlugin, Function
+    @_load plugins, {loadPlugin}
 
-    tracer = Tracer "Plugin.load()"
+  loadGlobals: (plugins, loadPlugin) ->
+    assertType plugins, Array
+    assertType loadPlugin, Function
+    @_load plugins, {loadPlugin, global: yes}
 
-    pluginsLoading = Object.create null
+  _loadedGlobals: Object.create null
 
-    Promise.chain plugins, (plugin) ->
+  _load: (plugins, config) ->
+
+    loadingPlugins = Object.create null
+    plugins = sync.map plugins, (plugin) ->
 
       if isType plugin, String
         plugin = Plugin.get plugin
 
-      return if not isType plugin, Plugin
-      pluginsLoading[plugin.name] = Promise.defer()
+      loadingPlugins[plugin.name] = Promise.defer()
+      return plugin
 
-      Promise.try ->
-        loading = iterator plugin, pluginsLoading
-        return loading if plugin._loading
-        throw Error "Must call 'plugin.load' in the iterator!"
-
-      .then (result) ->
-        pluginsLoading[plugin.name].resolve result
-        return result
-
-      .fail (error) ->
-        return if error.plugin
-        error.plugin = plugin
-        pluginsLoading[plugin.name].reject error
-        throw error
-
-type.didBuild ->
-
-  define lotus,
-    _moduleMixins: [] # Used by Plugin::initModuleType
-    _fileMixins: []   # Used by Plugin::initFileType
-
-  assertType lotus._moduleMixins, Array
-  assertType lotus._fileMixins, Array
+    config.loadingPlugins = loadingPlugins
+    Promise.all plugins, (plugin) ->
+      plugin._load config
+      deferred = loadingPlugins[plugin.name]
+      return deferred.promise
 
 module.exports = Plugin = type.build()
