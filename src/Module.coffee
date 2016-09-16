@@ -5,7 +5,6 @@ emptyFunction = require "emptyFunction"
 SortedArray = require "sorted-array"
 assertType = require "assertType"
 sortObject = require "sortObject"
-Promise = require "Promise"
 hasKeys = require "hasKeys"
 inArray = require "in-array"
 isType = require "isType"
@@ -304,11 +303,7 @@ Module.addLoaders
 
   plugins: ->
 
-    config = @config.lotus
-    return unless isType config, Object
-
     plugins = []
-      .concat config.plugins or []
       .concat @config.plugins or []
       .concat Module._plugins
 

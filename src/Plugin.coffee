@@ -1,7 +1,6 @@
 
 emptyFunction = require "emptyFunction"
 assertType = require "assertType"
-Promise = require "Promise"
 isType = require "isType"
 define = require "define"
 steal = require "steal"
@@ -88,54 +87,52 @@ type.defineMethods
 
   _load: (config) ->
 
-    if @_loaded
-      return @_loaded
-
     Promise.try =>
+
+      if @_loaded
+        return @_loaded
 
       if not lotus.isFile @name
         throw Error "Plugin does not exist: '#{@name}'"
 
-      plugin = require @name
-
-      if not isType plugin, Object
+      loaded = require @name
+      if not isType loaded, Object
         throw TypeError "Plugin must return an object: '#{@name}'"
 
-      @_loaded = plugin
-      @_loadDeps plugin, config
+      @_loaded = loaded
+      @_loadDeps config
 
-      .then => config.loadPlugin this
+    .then => config.onLoad this
 
-      .then =>
+    .then =>
 
-        if config.global
-          Plugin._loadedGlobals[@name] = plugin
+      if config.global
+        Plugin._loadedGlobals[@name] = @_loaded
 
-        loading = config.loadingPlugins[@name]
-        loading.resolve this
-        return plugin
+      loading = config.loadingPlugins[@name]
+      loading.resolve this
+      return @_loaded
 
     .fail (error) =>
       log.moat 1
-      log.red "Plugin failed to load: "
+      log.red "Plugin threw an error: "
       log.white @name
       log.moat 0
       log.gray error.stack
       log.moat 1
       return
 
-  _loadDeps: (plugin, config) ->
-
+  _loadDeps: (config) ->
     deps = []
 
     if not config.global
-      if Array.isArray plugin.globalDependencies
-        for dep in plugin.globalDependencies
+      if Array.isArray @_loaded.globalDependencies
+        for dep in @_loaded.globalDependencies
           continue if Plugin._loadedGlobals[dep]
           throw Error "Unmet global plugin dependency: #{dep}"
 
-    if Array.isArray plugin.dependencies
-      for dep in plugin.dependencies
+    if Array.isArray @_loaded.dependencies
+      for dep in @_loaded.dependencies
         loading = config.loadingPlugins[dep]
         if loading
           deps.push loading.promise
@@ -153,15 +150,15 @@ type.defineStatics
       pluginCache[name] = Plugin name
     return pluginCache[name]
 
-  load: (plugins, loadPlugin) ->
+  load: (plugins, onLoad) ->
     assertType plugins, Array
-    assertType loadPlugin, Function
-    @_load plugins, {loadPlugin}
+    assertType onLoad, Function
+    @_load plugins, {onLoad}
 
-  loadGlobals: (plugins, loadPlugin) ->
+  loadGlobals: (plugins, onLoad) ->
     assertType plugins, Array
-    assertType loadPlugin, Function
-    @_load plugins, {loadPlugin, global: yes}
+    assertType onLoad, Function
+    @_load plugins, {onLoad, global: yes}
 
   _loadedGlobals: Object.create null
 

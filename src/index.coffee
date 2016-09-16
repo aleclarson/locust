@@ -6,7 +6,6 @@ module.exports = lotus
 
 assertTypes = require "assertTypes"
 assertType = require "assertType"
-Promise = require "Promise"
 inArray = require "in-array"
 isType = require "isType"
 define = require "define"

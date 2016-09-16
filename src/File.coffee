@@ -1,6 +1,5 @@
 
 assertType = require "assertType"
-Promise = require "Promise"
 asyncFs = require "io/async"
 syncFs = require "io/sync"
 isType = require "isType"
