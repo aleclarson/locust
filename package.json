@@ -32,7 +32,7 @@
     "key-bindings": "aleclarson/key-bindings#1.1.0",
     "log": "aleclarson/log#1.0.0",
     "lotus-require": "aleclarson/lotus-require#3.1.0",
-    "minimist": "~0.0.8",
+    "minimist": "1.2.0",
     "postinstall-build": "0.2.x",
     "sortObject": "aleclarson/sortObject#1.0.0",
     "sorted-array": "aleclarson/sorted-array#2.0.0",
