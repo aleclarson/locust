@@ -10,6 +10,7 @@ inArray = require "in-array"
 isType = require "isType"
 define = require "define"
 sync = require "sync"
+path = require "path"
 fs = require "io/sync"
 
 Plugin = require "./Plugin"
@@ -69,7 +70,7 @@ define lotus,
       command: String
       options: Object.Maybe
 
-    if config.dir[0] isnt "/"
+    if config.dir[0] isnt path.sep
       throw Error "'config.dir' must be an absolute path!"
 
     if not fs.isDir config.dir
@@ -92,7 +93,7 @@ define lotus,
       log.moat 1
       return
 
-    modulePath = config.dir + "/" + methodName
+    modulePath = path.join config.dir, methodName
 
     if not lotus.isFile modulePath
       log.moat 1
@@ -126,7 +127,7 @@ define lotus,
 
   _initConfig: ->
     return if isType lotus.config, Object
-    configPath = lotus.path + "/lotus.json"
+    configPath = path.join lotus.path, "lotus.config.json"
     if not fs.isFile configPath
       throw Error "Missing global config: '#{configPath}'"
     lotus.config = JSON.parse fs.read configPath
