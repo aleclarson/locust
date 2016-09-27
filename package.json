@@ -16,7 +16,7 @@
     "Event": "aleclarson/Event#2.0.1",
     "LazyVar": "aleclarson/LazyVar#2.1.0",
     "Promise": "aleclarson/Promise#1.0.0",
-    "Property": "aleclarson/Property#1.1.1",
+    "Property": "aleclarson/Property#1.2.0",
     "ReactiveVar": "aleclarson/ReactiveVar#2.0.0",
     "Type": "aleclarson/Type#1.1.0",
     "assertType": "aleclarson/assertType#2.0.0",
