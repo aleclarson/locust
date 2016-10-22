@@ -241,18 +241,22 @@ type.defineStatics
       if a > b then 1 else -1
 
     fs.async.readDir dirPath
+
     .then (children) ->
       Promise.chain children, (moduleName) ->
         Module.load moduleName
         .then (mod) -> mod and mods.insert mod
         .fail emptyFunction # Ignore module errors.
+
     .then -> mods.array
 
   addLoader: (name, loader) ->
-    if not @_loaders[name]
-      @_loaders[name] = loader
-      return
-    throw Error "Loader named '#{name}' already exists!"
+
+    if @_loaders[name]
+      throw Error "Loader named '#{name}' already exists!"
+
+    @_loaders[name] = loader
+    return
 
   addLoaders: (loaders) ->
     assertType loaders, Object
@@ -261,10 +265,13 @@ type.defineStatics
     return
 
   addPlugin: (plugin) ->
+
     assertType plugin, String
-    index = @_plugins.indexOf plugin
-    @_plugins.push plugin if index < 0
-    throw Error "Plugin has already been added!"
+
+    if 0 <= @_plugins.indexOf plugin
+      throw Error "Plugin has already been added!"
+
+    @_plugins.push plugin
     return
 
 type.addMixins lotus._moduleMixins
