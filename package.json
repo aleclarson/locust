@@ -35,7 +35,7 @@
     "minimist": "1.2.0",
     "sortObject": "aleclarson/sortObject#1.0.0",
     "sorted-array": "aleclarson/sorted-array#2.0.0",
-    "steal": "aleclarson/steal#1.1.0",
+    "steal": "aleclarson/steal#1.2.0",
     "sync": "aleclarson/sync#1.0.0"
   },
   "implicitDependencies": [
