@@ -68,7 +68,10 @@ type.defineProperties
 type.defineMethods
 
   getFile: (filePath) ->
-    @files[filePath] ?= lotus.File filePath
+    return file if file = @files[filePath]
+    return null unless mod = Module.resolve filePath
+    @files[filePath] = file = lotus.File filePath, mod
+    return file
 
   load: (names) ->
 
@@ -142,7 +145,8 @@ type.defineMethods
       .then (filePaths) => # TODO: Handle cancellation properly.
         files = []
         for filePath in filePaths
-          files.push @getFile filePath
+          if file = @getFile filePath
+            files.push file
         return files
 
       .fail (error) =>
@@ -191,8 +195,8 @@ type.defineStatics
       packageRoot = path.dirname packageRoot
       packageJson = path.join packageRoot, "package.json"
       break if fs.sync.exists packageJson
-    name = path.basename packageRoot
-    return moduleCache[name]
+    moduleName = path.basename packageRoot
+    return moduleCache[moduleName]
 
   load: (moduleName) ->
 
