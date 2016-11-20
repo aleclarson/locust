@@ -1,6 +1,5 @@
 
 assertType = require "assertType"
-Promise = require "Promise"
 asyncFs = require "io/async"
 syncFs = require "io/sync"
 isType = require "isType"
@@ -19,7 +18,7 @@ type.initArgs (args) ->
   if not path.isAbsolute filePath
     throw Error "Expected an absolute path: '#{filePath}'"
 
-  args[1] ?= lotus.Module.resolve args[0]
+  args[1] ?= lotus.Module.resolve filePath
   assertType args[1], lotus.Module, "module"
 
 type.defineValues (filePath, mod) ->

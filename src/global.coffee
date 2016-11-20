@@ -1,6 +1,5 @@
 
 global.lotus = require "lotus-require"
-lotus.register exclude: [ "/node_modules/" ]
 
 require "isDev"
 

@@ -4,11 +4,17 @@ module.exports = ->
   require "./global"
   require "./index"
 
+  timeStart = Date.now()
   {exit} = process
   process.exit = ->
     log.onceFlushed ->
-      console.log log.color.gray.dim "Exiting..."
+      timeEnd = Date.now()
+      log.moat 1
+      log.gray.dim "Exiting after #{timeEnd - timeStart}ms..."
+      log.moat 1
+      log.flush()
       exit.call process
+    return
 
   log.indent = 2
   log.moat 1
@@ -27,5 +33,4 @@ module.exports = ->
     log.red error.stack
     log.moat 1
 
-  .then ->
-    process.exit()
+  .then process.exit
