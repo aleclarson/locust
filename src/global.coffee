@@ -4,7 +4,6 @@ global.isDev = require "isDev"
 
 require "ReactiveVar" # Required for 'Property({ reactive: true })'
 require "LazyVar"     # Required for 'Property({ lazy: Function })'
-require "Event"       # Required for 'Builder::defineEvents'
 
 global.Promise = require "Promise"
 global.log = require "log"

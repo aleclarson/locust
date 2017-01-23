@@ -13,7 +13,6 @@
     "postinstall": "npm run build"
   },
   "dependencies": {
-    "Event": "aleclarson/Event#3.1.2",
     "LazyVar": "aleclarson/LazyVar#2.1.1",
     "Promise": "aleclarson/Promise#2.1.1",
     "Property": "aleclarson/Property#1.2.1",
