@@ -1,7 +1,6 @@
 
 global.lotus = require "lotus-require"
-
-require "isDev"
+global.isDev = require "isDev"
 
 require "ReactiveVar" # Required for 'Property({ reactive: true })'
 require "LazyVar"     # Required for 'Property({ lazy: Function })'
