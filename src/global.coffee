@@ -1,21 +1,12 @@
 
 global.lotus = require "lotus-require"
-
-require "isDev"
+global.isDev = require "isDev"
 
 require "ReactiveVar" # Required for 'Property({ reactive: true })'
 require "LazyVar"     # Required for 'Property({ lazy: Function })'
-require "Event"       # Required for 'Builder::defineEvents'
 
 global.Promise = require "Promise"
 global.log = require "log"
-
-#
-# Key bindings
-#
-
-KeyBindings = require "key-bindings"
-global.__keys = KeyBindings process.stdin
 
 #
 # Error handling

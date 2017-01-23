@@ -1,6 +1,6 @@
 {
   "name": "lotus",
-  "version": "3.3.0",
+  "version": "3.3.1",
   "main": "js/index",
   "bin": {
     "lotus": "bin/lotus"
@@ -13,12 +13,11 @@
     "postinstall": "npm run build"
   },
   "dependencies": {
-    "Event": "aleclarson/Event#2.1.0",
     "LazyVar": "aleclarson/LazyVar#2.1.1",
-    "Promise": "aleclarson/Promise#2.1.0",
+    "Promise": "aleclarson/Promise#2.1.1",
     "Property": "aleclarson/Property#1.2.1",
     "ReactiveVar": "aleclarson/ReactiveVar#2.1.0",
-    "Type": "aleclarson/Type#2.1.0",
+    "Type": "aleclarson/Type#2.2.0",
     "assertType": "aleclarson/assertType#2.0.1",
     "assertTypes": "aleclarson/assertTypes#2.0.1",
     "define": "aleclarson/define#1.0.1",
@@ -29,8 +28,7 @@
     "io": "aleclarson/io#2.2.0",
     "isDev": "aleclarson/isDev#2.0.0",
     "isType": "aleclarson/isType#1.0.1",
-    "key-bindings": "aleclarson/key-bindings#1.1.0",
-    "log": "aleclarson/log#2.0.1",
+    "log": "aleclarson/log#2.1.0",
     "lotus-require": "aleclarson/lotus-require#3.1.0",
     "minimist": "1.2.0",
     "sortObject": "aleclarson/sortObject#1.0.1",
