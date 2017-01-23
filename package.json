@@ -29,7 +29,6 @@
     "io": "aleclarson/io#2.2.0",
     "isDev": "aleclarson/isDev#2.0.0",
     "isType": "aleclarson/isType#1.0.1",
-    "key-bindings": "aleclarson/key-bindings#1.1.0",
     "log": "aleclarson/log#2.1.0",
     "lotus-require": "aleclarson/lotus-require#3.1.0",
     "minimist": "1.2.0",

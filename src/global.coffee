@@ -11,13 +11,6 @@ global.Promise = require "Promise"
 global.log = require "log"
 
 #
-# Key bindings
-#
-
-KeyBindings = require "key-bindings"
-global.__keys = KeyBindings process.stdin
-
-#
 # Error handling
 #
 
