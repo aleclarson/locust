@@ -34,9 +34,13 @@ loading = do ->
 
   options = {global: yes}
   loader = (plugin) ->
-    plugin.initCommands lotus.commands
-    plugin.initModuleType()
-    plugin.initFileType()
+
+    if commands = plugin.loadCommands()
+      Object.assign lotus.commands, commands
+
+    plugin.loadGlobals()
+    plugin.loadFileMixin()
+    plugin.loadModuleMixin()
     return
 
   Promise.all config.plugins, (name) ->

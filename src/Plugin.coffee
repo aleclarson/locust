@@ -41,32 +41,23 @@ type.defineGetters
 
 type.defineMethods
 
-  initCommands: (commands) ->
-
-    newCommands = @_callHook "initCommands"
-    return unless newCommands
-    assertType newCommands, Object
-
-    for key, fn of newCommands
-      assertType fn, Function
-      commands[key] = fn
-    return
-
   initModule: (mod, options) ->
     @_initModule mod, options
 
-  initModuleType: (type) ->
-    initType = @_callHook "initModuleType"
-    return unless initType
-    assertType initType, Function
-    lotus._moduleMixins.push initType
+  loadGlobals: ->
+    @_callHook "loadGlobals"
+
+  loadCommands: ->
+    @_callHook "loadCommands"
+
+  loadModuleMixin: (type) ->
+    if mixin = @_callHook "loadModuleMixin"
+      lotus.moduleMixins.push mixin
     return
 
-  initFileType: (type) ->
-    initType = @_callHook "initFileType"
-    return unless initType
-    assertType initType, Function
-    lotus._fileMixins.push initType
+  loadFileMixin: (type) ->
+    if mixin = @_callHook "loadFileMixin"
+      lotus.fileMixins.push mixin
     return
 
   _callHook: (name, context, args) ->
