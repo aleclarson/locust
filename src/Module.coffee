@@ -29,6 +29,8 @@ type.defineValues (name, path) ->
 
   files: Object.create null
 
+  _loaders: Object.create null
+
   _loading: Object.create null
 
   _crawling: Object.create null
@@ -55,6 +57,14 @@ type.defineProperties
     value: null
     willSet: resolveAbsolutePath
 
+type.initInstance do ->
+  defaultLoaders = null
+  return ->
+    defaultLoaders ?=
+      config: @_loadConfig
+      plugins: @_loadPlugins
+    @addLoaders defaultLoaders
+
 #
 # Prototype
 #
@@ -68,15 +78,13 @@ type.defineMethods
     return file
 
   load: (names) ->
-
     assertType names, Array
-
-    return Promise.chain names, (name) =>
+    Promise.chain names, (name) =>
 
       @_loading[name] ?= Promise.try =>
-        load = Module._loaders[name]
-        assertType load, Function
-        load.call this
+        if loader = @_loaders[name]
+        then loader.call this
+        else throw Error "Loader named '#{name}' does not exist!"
 
       .fail (error) =>
         @_loading[name] = null
@@ -171,41 +179,26 @@ type.defineMethods
     return inArray @config.plugins, plugin if @config
     throw Error "Must first load the module's config file!"
 
-type.defineStatics
-
-  _loaders: Object.create null
-
-  addLoader: (name, loader) ->
-
-    if @_loaders[name]
-      throw Error "Loader named '#{name}' already exists!"
-
-    @_loaders[name] = loader
+  addLoader: (key, loader) ->
+    if loader instanceof Function
+    then @_loaders[key] = loader
+    else throw TypeError "Loaders must be functions!"
     return
 
   addLoaders: (loaders) ->
     assertType loaders, Object
-    for name, loader of loaders
-      @addLoader name, loader
+    for key, loader of loaders
+      @addLoader key, loader
     return
 
-type.addMixins lotus._moduleMixins
+  _loadConfig: ->
 
-module.exports = Module = type.build()
-
-Module.addLoaders
-
-  config: ->
-
-    configPath = @path + "/package.json"
-
+    configPath = path.join @path, "package.json"
     unless fs.isFile configPath
       error = Error "'package.json' could not be found!"
       return Promise.reject error
 
-    try @config = JSON.parse fs.readFile configPath
-    catch error
-      throw Error "Failed to parse JSON:\n" + configPath + "\n\n" + error.stack
+    @config = JSON.parse fs.readFile configPath
 
     if isType @config.src, String
       @src = @config.src
@@ -218,8 +211,9 @@ Module.addLoaders
 
     else if isType @config.main, String
       @dest = path.dirname path.join @path, @config.main
+    return
 
-  plugins: ->
+  _loadPlugins: ->
 
     unless @config
       throw Error "Must load the 'config' first!"
@@ -238,3 +232,7 @@ Module.addLoaders
     plugins = Array.from plugins
     Promise.all plugins, (name) ->
       lotus.plugins.load name, loader
+
+type.addMixins lotus._moduleMixins
+
+module.exports = Module = type.build()
