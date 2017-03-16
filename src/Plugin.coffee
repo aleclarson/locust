@@ -9,8 +9,7 @@ Type = require "Type"
 
 type = Type "Plugin"
 
-type.defineArgs
-  name: String.isRequired
+type.defineArgs [String]
 
 type.defineValues (name) ->
 

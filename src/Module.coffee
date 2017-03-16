@@ -17,9 +17,7 @@ fs = require "fsx"
 
 type = Type "Lotus_Module"
 
-type.defineArgs
-  name: String.isRequired
-  path: String.isRequired
+type.defineArgs [String, String.Maybe]
 
 type.defineValues (name, path) ->
 

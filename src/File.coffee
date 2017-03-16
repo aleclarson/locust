@@ -8,19 +8,14 @@ fs = require "fsx"
 
 type = Type "Lotus_File"
 
-type.defineArgs
-  filePath: String.isRequired
+type.defineValues (filePath, mod) ->
 
-type.initArgs (args) ->
-  [filePath] = args
-
-  if not path.isAbsolute filePath
+  assertType filePath, String
+  unless path.isAbsolute filePath
     throw Error "Expected an absolute path: '#{filePath}'"
 
-  args[1] ?= lotus.modules.resolve filePath
-  assertType args[1], lotus.Module, "module"
-
-type.defineValues (filePath, mod) ->
+  mod ?= lotus.modules.resolve filePath
+  assertType mod, lotus.Module
 
   path: filePath
 
