@@ -15,17 +15,11 @@ Type = require "Type"
 log = require "log"
 fs = require "io"
 
-moduleCache = Object.create null
-
 type = Type "Lotus_Module"
 
 type.defineArgs
   name: String.isRequired
   path: String.isRequired
-
-type.initArgs ([ name ]) ->
-  return if not moduleCache[name]
-  throw Error "Module named '#{name}' already exists!"
 
 type.defineValues (name, path) ->
 
@@ -69,7 +63,7 @@ type.defineMethods
 
   getFile: (filePath) ->
     return file if file = @files[filePath]
-    return null unless mod = Module.resolve filePath
+    return null unless mod = lotus.modules.resolve filePath
     @files[filePath] = file = lotus.File filePath, mod
     return file
 
@@ -182,77 +176,6 @@ type.defineStatics
   _loaders: Object.create null
 
   _plugins: []
-
-  has: (moduleName) ->
-    moduleCache[moduleName]?
-
-  get: (moduleName, modulePath) ->
-    moduleCache[moduleName] ?= Module moduleName, modulePath
-
-  resolve: (filePath) ->
-    packageRoot = filePath
-    loop
-      packageRoot = path.dirname packageRoot
-      packageJson = path.join packageRoot, "package.json"
-      break if fs.sync.exists packageJson
-    moduleName = path.basename packageRoot
-    return moduleCache[moduleName]
-
-  load: (moduleName) ->
-
-    if moduleName[0] is "."
-      modulePath = path.resolve process.cwd(), moduleName
-      moduleName = path.basename modulePath
-
-    else if path.isAbsolute moduleName
-      modulePath = moduleName
-      moduleName = lotus.relative modulePath
-
-    else
-      modulePath = path.join lotus.path, moduleName
-
-    fs.async.isDir modulePath
-    .assert "Module path must be a directory: '#{modulePath}'"
-
-    .then ->
-      configPath = path.join modulePath, "package.json"
-      fs.async.isFile configPath
-      .assert "Missing config file: '#{configPath}'"
-
-    .then ->
-      Module.get moduleName, modulePath
-
-  # Find modules in the given directory.
-  # Import the 'lotus-watch' plugin and
-  # call 'Module.watch' if you need to know
-  # about added/changed/deleted modules.
-  crawl: (dirPath) ->
-
-    # TODO: Support multiple $LOTUS_PATH
-    dirPath ?= lotus.path
-
-    assertType dirPath, String
-
-    if not path.isAbsolute dirPath
-      throw Error "Expected an absolute path: '#{dirPath}'"
-
-    if not fs.sync.isDir dirPath
-      throw Error "Expected a directory: '#{dirPath}'"
-
-    mods = SortedArray [], (a, b) ->
-      a = a.name.toLowerCase()
-      b = b.name.toLowerCase()
-      if a > b then 1 else -1
-
-    fs.async.readDir dirPath
-
-    .then (children) ->
-      Promise.chain children, (moduleName) ->
-        Module.load moduleName
-        .then (mod) -> mod and mods.insert mod
-        .fail emptyFunction # Ignore module errors.
-
-    .then -> mods.array
 
   addLoader: (name, loader) ->
 

@@ -23,6 +23,7 @@
     "define": "aleclarson/define#1.0.1",
     "emptyFunction": "aleclarson/emptyFunction#1.0.0",
     "globby": "aleclarson/globby#4.0.0",
+    "has": "aleclarson/has#1.0.0",
     "hasKeys": "aleclarson/hasKeys#1.0.0",
     "in-array": "aleclarson/in-array#1.0.0",
     "io": "aleclarson/io#2.2.0",
