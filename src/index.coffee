@@ -2,6 +2,7 @@
 require "./global"
 module.exports = lotus
 
+SortedArray = require "SortedArray"
 assertType = require "assertType"
 path = require "path"
 fs = require "fsx"
@@ -67,3 +68,28 @@ lotus.run = (command, options = {}) ->
     if method instanceof Function
     then method options
     else throw Error "Invalid command: '#{command}'"
+
+# Crawl a directory for modules.
+# For module watching, install `lotus-watch` and call `lotus.watchModules`.
+lotus.findModules = (root) ->
+
+  assertType root, String.Maybe
+  root ?= lotus.path
+
+  unless path.isAbsolute root
+    throw Error "Expected an absolute path: '#{root}'"
+
+  unless fs.isDir root
+    throw Error "Expected a directory: '#{root}'"
+
+  mods = SortedArray [], (a, b) ->
+    a = a.name.toLowerCase()
+    b = b.name.toLowerCase()
+    if a > b then 1 else -1
+
+  fs.readDir root
+  .forEach (modName) ->
+    try mod = lotus.modules.load modName
+    mods.insert mod if mod
+
+  .then -> mods.array
