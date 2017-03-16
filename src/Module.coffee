@@ -175,8 +175,6 @@ type.defineStatics
 
   _loaders: Object.create null
 
-  _plugins: []
-
   addLoader: (name, loader) ->
 
     if @_loaders[name]
@@ -189,16 +187,6 @@ type.defineStatics
     assertType loaders, Object
     for name, loader of loaders
       @addLoader name, loader
-    return
-
-  addPlugin: (plugin) ->
-
-    assertType plugin, String
-
-    if 0 <= @_plugins.indexOf plugin
-      throw Error "Plugin has already been added!"
-
-    @_plugins.push plugin
     return
 
 type.addMixins lotus._moduleMixins
@@ -233,10 +221,20 @@ Module.addLoaders
 
   plugins: ->
 
-    plugins = []
-      .concat @config.plugins or []
-      .concat Module._plugins
+    unless @config
+      throw Error "Must load the 'config' first!"
 
-    mod = this
-    lotus.Plugin.load plugins, (plugin) ->
-      return plugin.initModule mod
+    plugins = new Set
+
+    if names = @config.plugins
+      plugins.add name for name in names
+
+    for name in lotus._modulePlugins
+      plugins.add name
+
+    loader = (plugin) =>
+      plugin.initModule this
+
+    plugins = Array.from plugins
+    Promise.all plugins, (name) ->
+      lotus.plugins.load name, loader

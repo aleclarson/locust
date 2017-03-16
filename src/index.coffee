@@ -121,6 +121,10 @@ define lotus,
 
 define lotus,
 
+  plugins: require "./PluginCache"
+
+  _modulePlugins: []
+
   _moduleMixins: []
 
   _fileMixins: []
@@ -134,19 +138,23 @@ define lotus,
     return
 
   _loadPlugins: ->
+    {plugins, config} = lotus
 
-    if not lotus.config
+    unless config
       throw Error "Must call '_initConfig' first!"
 
-    {plugins} = lotus.config
-    if not Array.isArray plugins
+    unless Array.isArray config.plugins
       return Promise()
 
-    Plugin.loadGlobals plugins, (plugin) =>
+    options = {global: yes}
+    loader = (plugin) =>
       plugin.initCommands @_commands
       plugin.initModuleType()
       plugin.initFileType()
       return
+
+    Promise.all config.plugins, (name) ->
+      plugins.load name, options, loader
 
   _initClasses: (options) ->
     return if lotus.Plugin
