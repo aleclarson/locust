@@ -13,7 +13,7 @@ sync = require "sync"
 path = require "path"
 Type = require "Type"
 log = require "log"
-fs = require "io"
+fs = require "fsx"
 
 type = Type "Lotus_Module"
 
@@ -164,7 +164,7 @@ type.defineMethods
     else delete @config.devDependencies
 
     config = JSON.stringify @config, null, 2
-    fs.sync.write configPath, config + log.ln
+    fs.writeFile configPath, config + log.ln
     return
 
   hasPlugin: (plugin) ->
@@ -211,29 +211,25 @@ Module.addLoaders
 
     configPath = @path + "/package.json"
 
-    unless fs.sync.isFile configPath
+    unless fs.isFile configPath
       error = Error "'package.json' could not be found!"
       return Promise.reject error
 
-    fs.async.read configPath
+    try @config = JSON.parse fs.readFile configPath
+    catch error
+      throw Error "Failed to parse JSON:\n" + configPath + "\n\n" + error.stack
 
-    .then (json) =>
+    if isType @config.src, String
+      @src = @config.src
 
-      try @config = JSON.parse json
-      catch error
-        throw Error "Failed to parse JSON:\n" + configPath + "\n\n" + error.stack
+    if isType @config.spec, String
+      @spec = @config.spec
 
-      if isType @config.src, String
-        @src = @config.src
+    if isType @config.dest, String
+      @dest = @config.dest
 
-      if isType @config.spec, String
-        @spec = @config.spec
-
-      if isType @config.dest, String
-        @dest = @config.dest
-
-      else if isType @config.main, String
-        @dest = path.dirname path.join @path, @config.main
+    else if isType @config.main, String
+      @dest = path.dirname path.join @path, @config.main
 
   plugins: ->
 

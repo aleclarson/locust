@@ -1,11 +1,10 @@
 
 assertType = require "assertType"
-asyncFs = require "io/async"
-syncFs = require "io/sync"
 isType = require "isType"
 path = require "path"
 Type = require "Type"
 log = require "log"
+fs = require "fsx"
 
 type = Type "Lotus_File"
 
@@ -33,7 +32,7 @@ type.defineValues (filePath, mod) ->
 
   dir: path.relative mod.path, path.dirname filePath
 
-  _reading: null
+  _contents: null
 
 type.defineGetters
 
@@ -58,16 +57,12 @@ type.defineGetters
 
 type.defineMethods
 
-  read: (options = {}) ->
+  read: ->
+    @_contents ?= fs.readFile @path
 
-    if options.force or not @_reading
-      @_reading = if options.sync
-        Promise syncFs.read @path
-      else asyncFs.read @path
-
-    if options.sync
-      return @_reading.inspect().value
-    return @_reading
+  invalidate: ->
+    @_contents = null
+    return
 
 type.addMixins lotus._fileMixins
 

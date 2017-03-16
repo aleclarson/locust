@@ -11,7 +11,7 @@ isType = require "isType"
 define = require "define"
 sync = require "sync"
 path = require "path"
-fs = require "io/sync"
+fs = require "fsx"
 
 Plugin = require "./Plugin"
 
@@ -130,7 +130,7 @@ define lotus,
     configPath = path.join lotus.path, "lotus.config.json"
     if not fs.isFile configPath
       throw Error "Missing global config: '#{configPath}'"
-    lotus.config = JSON.parse fs.read configPath
+    lotus.config = JSON.parse fs.readFile configPath
     return
 
   _loadPlugins: ->
