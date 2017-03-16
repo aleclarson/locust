@@ -1,27 +1,20 @@
 
 assertType = require "assertType"
-asyncFs = require "io/async"
-syncFs = require "io/sync"
 isType = require "isType"
 path = require "path"
 Type = require "Type"
-log = require "log"
+fs = require "fsx"
 
 type = Type "Lotus_File"
 
-type.defineArgs
-  filePath: String.isRequired
+type.defineValues (filePath, mod) ->
 
-type.initArgs (args) ->
-  [filePath] = args
-
-  if not path.isAbsolute filePath
+  assertType filePath, String
+  unless path.isAbsolute filePath
     throw Error "Expected an absolute path: '#{filePath}'"
 
-  args[1] ?= lotus.Module.resolve filePath
-  assertType args[1], lotus.Module, "module"
-
-type.defineValues (filePath, mod) ->
+  mod ?= lotus.modules.resolve filePath
+  assertType mod, lotus.Module
 
   path: filePath
 
@@ -33,13 +26,17 @@ type.defineValues (filePath, mod) ->
 
   dir: path.relative mod.path, path.dirname filePath
 
-  _reading: null
+  _contents: null
+
+#
+# Prototype
+#
 
 type.defineGetters
 
   dest: ->
 
-    if not @dir.length
+    unless @dir.length
       return null
 
     # Test files are compiled on-the-fly.
@@ -58,17 +55,13 @@ type.defineGetters
 
 type.defineMethods
 
-  read: (options = {}) ->
+  read: ->
+    @_contents ?= fs.readFile @path
 
-    if options.force or not @_reading
-      @_reading = if options.sync
-        Promise syncFs.read @path
-      else asyncFs.read @path
+  invalidate: ->
+    @_contents = null
+    return
 
-    if options.sync
-      return @_reading.inspect().value
-    return @_reading
-
-type.addMixins lotus._fileMixins
+type.addMixins lotus.fileMixins
 
 module.exports = File = type.build()

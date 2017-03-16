@@ -1,6 +1,6 @@
 {
   "name": "lotus",
-  "version": "3.3.1",
+  "version": "4.0.0",
   "main": "js/index",
   "bin": {
     "lotus": "bin/lotus"
@@ -13,28 +13,27 @@
     "postinstall": "npm run build"
   },
   "dependencies": {
-    "LazyVar": "aleclarson/LazyVar#2.1.1",
-    "Promise": "aleclarson/Promise#2.1.1",
-    "Property": "aleclarson/Property#1.2.1",
-    "ReactiveVar": "aleclarson/ReactiveVar#2.1.0",
-    "Type": "aleclarson/Type#2.2.0",
+    "LazyVar": "aleclarson/LazyVar#2.2.0",
+    "Promise": "aleclarson/Promise#2.2.1",
+    "ReactiveVar": "aleclarson/ReactiveVar#2.2.0",
+    "SortedArray": "aleclarson/SortedArray#2.1.0",
+    "Type": "aleclarson/Type#2.3.1",
     "assertType": "aleclarson/assertType#2.0.1",
-    "assertTypes": "aleclarson/assertTypes#2.0.1",
     "define": "aleclarson/define#1.0.1",
     "emptyFunction": "aleclarson/emptyFunction#1.0.0",
-    "globby": "aleclarson/globby#4.0.0",
+    "fsx": "aleclarson/fsx#1.2.0",
+    "globby": "aleclarson/globby#4.0.1",
+    "has": "aleclarson/has#1.0.0",
     "hasKeys": "aleclarson/hasKeys#1.0.0",
     "in-array": "aleclarson/in-array#1.0.0",
-    "io": "aleclarson/io#2.2.0",
     "isDev": "aleclarson/isDev#2.0.0",
     "isType": "aleclarson/isType#1.0.1",
-    "log": "aleclarson/log#2.1.0",
-    "lotus-require": "aleclarson/lotus-require#3.1.0",
+    "log": "aleclarson/log#2.2.0",
+    "lotus-require": "aleclarson/lotus-require#3.1.1",
     "minimist": "1.2.0",
-    "sortObject": "aleclarson/sortObject#1.0.1",
-    "sorted-array": "aleclarson/sorted-array#2.0.1",
+    "sortObject": "aleclarson/sortObject#1.0.2",
     "steal": "aleclarson/steal#1.2.0",
-    "sync": "aleclarson/sync#1.0.1"
+    "sync": "aleclarson/sync#1.0.2"
   },
   "implicitDependencies": [
     "path"

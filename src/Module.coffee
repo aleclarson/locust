@@ -1,31 +1,19 @@
 
-# TODO: Fix crash when renaming a module directory.
+# TODO: Support renaming a module directory.
 
-emptyFunction = require "emptyFunction"
-SortedArray = require "sorted-array"
 assertType = require "assertType"
 sortObject = require "sortObject"
 hasKeys = require "hasKeys"
 inArray = require "in-array"
 isType = require "isType"
 globby = require "globby"
-sync = require "sync"
 path = require "path"
 Type = require "Type"
-log = require "log"
-fs = require "io"
-
-moduleCache = Object.create null
+fs = require "fsx"
 
 type = Type "Lotus_Module"
 
-type.defineArgs
-  name: String.isRequired
-  path: String.isRequired
-
-type.initArgs ([ name ]) ->
-  return if not moduleCache[name]
-  throw Error "Module named '#{name}' already exists!"
+type.defineArgs [String, String]
 
 type.defineValues (name, path) ->
 
@@ -34,6 +22,8 @@ type.defineValues (name, path) ->
   path: path
 
   files: Object.create null
+
+  _loaders: Object.create null
 
   _loading: Object.create null
 
@@ -61,6 +51,14 @@ type.defineProperties
     value: null
     willSet: resolveAbsolutePath
 
+type.initInstance do ->
+  defaultLoaders = null
+  return ->
+    defaultLoaders ?=
+      config: @_loadConfig
+      plugins: @_loadPlugins
+    @addLoaders defaultLoaders
+
 #
 # Prototype
 #
@@ -69,28 +67,25 @@ type.defineMethods
 
   getFile: (filePath) ->
     return file if file = @files[filePath]
-    return null unless mod = Module.resolve filePath
+    return null unless mod = lotus.modules.resolve filePath
     @files[filePath] = file = lotus.File filePath, mod
     return file
 
   load: (names) ->
-
     assertType names, Array
-
-    return Promise.chain names, (name) =>
+    Promise.chain names, (name) =>
 
       @_loading[name] ?= Promise.try =>
-        load = Module._loaders[name]
-        assertType load, Function
-        load.call this
+        if loader = @_loaders[name]
+        then loader.call this
+        else throw Error "Loader named '#{name}' does not exist!"
 
       .fail (error) =>
         @_loading[name] = null
         throw error
 
-  # Find any files that belong to this module.
-  # Use the 'lotus-watch' plugin and call 'Module.watch' if
-  # you need to know about added/changed/deleted files.
+  # Crawl the root directory for files matching the pattern.
+  # For file watching, install `lotus-watch` and call the `watch` method on a `Module` instance.
   crawl: (pattern, options) ->
 
     if isType pattern, Object
@@ -103,9 +98,9 @@ type.defineMethods
     # If no pattern is specified, find the
     # compiled source files of this module.
     unless pattern
-      pattern = []
-      pattern[0] = @path + "/*.js"
-      pattern[1] = @dest + "/**/*.js" if @dest
+      pattern = [path.join @path, "*.js"]
+      if @dest isnt null
+        pattern.push path.join @dest, "**", "*.js"
 
     if Array.isArray pattern
 
@@ -124,10 +119,10 @@ type.defineMethods
 
     assertType pattern, String
 
-    if not path.isAbsolute pattern[0]
+    unless path.isAbsolute pattern[0]
       pattern = path.resolve @path, pattern
 
-    if not options.force
+    unless options.force
       return @_crawling[pattern] if @_crawling[pattern]
 
     if options.verbose
@@ -155,169 +150,80 @@ type.defineMethods
 
   saveConfig: ->
 
-    return unless @config
-
-    configPath = @path + "/package.json"
-
-    { dependencies, devDependencies } = @config
+    return unless config = @config
+    {dependencies, devDependencies} = config
 
     if hasKeys dependencies
-      @config.dependencies = sortObject dependencies
-    else delete @config.dependencies
+    then config.dependencies = sortObject dependencies
+    else delete config.dependencies
 
     if hasKeys devDependencies
-      @config.devDependencies = sortObject devDependencies
-    else delete @config.devDependencies
+    then config.devDependencies = sortObject devDependencies
+    else delete config.devDependencies
 
-    config = JSON.stringify @config, null, 2
-    fs.sync.write configPath, config + log.ln
+    config = JSON.stringify config, null, 2
+    configPath = path.join @path, "package.json"
+    fs.writeFile configPath, config + log.ln
     return
 
   hasPlugin: (plugin) ->
     return inArray @config.plugins, plugin if @config
     throw Error "Must first load the module's config file!"
 
-type.defineStatics
-
-  _loaders: Object.create null
-
-  _plugins: []
-
-  has: (moduleName) ->
-    moduleCache[moduleName]?
-
-  get: (moduleName, modulePath) ->
-    moduleCache[moduleName] ?= Module moduleName, modulePath
-
-  resolve: (filePath) ->
-    packageRoot = filePath
-    loop
-      packageRoot = path.dirname packageRoot
-      packageJson = path.join packageRoot, "package.json"
-      break if fs.sync.exists packageJson
-    moduleName = path.basename packageRoot
-    return moduleCache[moduleName]
-
-  load: (moduleName) ->
-
-    if moduleName[0] is "."
-      modulePath = path.resolve process.cwd(), moduleName
-      moduleName = path.basename modulePath
-
-    else if path.isAbsolute moduleName
-      modulePath = moduleName
-      moduleName = lotus.relative modulePath
-
-    else
-      modulePath = path.join lotus.path, moduleName
-
-    fs.async.isDir modulePath
-    .assert "Module path must be a directory: '#{modulePath}'"
-
-    .then ->
-      configPath = path.join modulePath, "package.json"
-      fs.async.isFile configPath
-      .assert "Missing config file: '#{configPath}'"
-
-    .then ->
-      Module.get moduleName, modulePath
-
-  # Find modules in the given directory.
-  # Import the 'lotus-watch' plugin and
-  # call 'Module.watch' if you need to know
-  # about added/changed/deleted modules.
-  crawl: (dirPath) ->
-
-    # TODO: Support multiple $LOTUS_PATH
-    dirPath ?= lotus.path
-
-    assertType dirPath, String
-
-    if not path.isAbsolute dirPath
-      throw Error "Expected an absolute path: '#{dirPath}'"
-
-    if not fs.sync.isDir dirPath
-      throw Error "Expected a directory: '#{dirPath}'"
-
-    mods = SortedArray [], (a, b) ->
-      a = a.name.toLowerCase()
-      b = b.name.toLowerCase()
-      if a > b then 1 else -1
-
-    fs.async.readDir dirPath
-
-    .then (children) ->
-      Promise.chain children, (moduleName) ->
-        Module.load moduleName
-        .then (mod) -> mod and mods.insert mod
-        .fail emptyFunction # Ignore module errors.
-
-    .then -> mods.array
-
-  addLoader: (name, loader) ->
-
-    if @_loaders[name]
-      throw Error "Loader named '#{name}' already exists!"
-
-    @_loaders[name] = loader
+  addLoader: (key, loader) ->
+    if loader instanceof Function
+    then @_loaders[key] = loader
+    else throw TypeError "Loaders must be functions!"
     return
 
   addLoaders: (loaders) ->
     assertType loaders, Object
-    for name, loader of loaders
-      @addLoader name, loader
+    for key, loader of loaders
+      @addLoader key, loader
     return
 
-  addPlugin: (plugin) ->
+  _loadConfig: ->
 
-    assertType plugin, String
-
-    if 0 <= @_plugins.indexOf plugin
-      throw Error "Plugin has already been added!"
-
-    @_plugins.push plugin
-    return
-
-type.addMixins lotus._moduleMixins
-
-module.exports = Module = type.build()
-
-Module.addLoaders
-
-  config: ->
-
-    configPath = @path + "/package.json"
-
-    unless fs.sync.isFile configPath
+    configPath = path.join @path, "package.json"
+    unless fs.isFile configPath
       error = Error "'package.json' could not be found!"
       return Promise.reject error
 
-    fs.async.read configPath
+    @config = JSON.parse fs.readFile configPath
 
-    .then (json) =>
+    if isType @config.src, String
+      @src = @config.src
 
-      try @config = JSON.parse json
-      catch error
-        throw Error "Failed to parse JSON:\n" + configPath + "\n\n" + error.stack
+    if isType @config.spec, String
+      @spec = @config.spec
 
-      if isType @config.src, String
-        @src = @config.src
+    if isType @config.dest, String
+      @dest = @config.dest
 
-      if isType @config.spec, String
-        @spec = @config.spec
+    else if isType @config.main, String
+      @dest = path.dirname path.join @path, @config.main
+    return
 
-      if isType @config.dest, String
-        @dest = @config.dest
+  _loadPlugins: ->
 
-      else if isType @config.main, String
-        @dest = path.dirname path.join @path, @config.main
+    unless @config
+      throw Error "Must load the 'config' first!"
 
-  plugins: ->
+    plugins = new Set
 
-    plugins = []
-      .concat @config.plugins or []
-      .concat Module._plugins
+    if names = @config.plugins
+      plugins.add name for name in names
 
-    mod = this
-    lotus.Plugin.load plugins, (plugin) ->
-      return plugin.initModule mod
+    for name in lotus.modulePlugins
+      plugins.add name
+
+    loader = (plugin) =>
+      plugin.initModule this
+
+    plugins = Array.from plugins
+    Promise.all plugins, (name) ->
+      lotus.plugins.load name, loader
+
+type.addMixins lotus.moduleMixins
+
+module.exports = Module = type.build()
