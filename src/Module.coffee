@@ -223,7 +223,7 @@ type.defineMethods
     if names = @config.plugins
       plugins.add name for name in names
 
-    for name in lotus._modulePlugins
+    for name in lotus.modulePlugins
       plugins.add name
 
     loader = (plugin) =>
@@ -233,6 +233,6 @@ type.defineMethods
     Promise.all plugins, (name) ->
       lotus.plugins.load name, loader
 
-type.addMixins lotus._moduleMixins
+type.addMixins lotus.moduleMixins
 
 module.exports = Module = type.build()

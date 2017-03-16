@@ -64,6 +64,6 @@ type.defineMethods
     @_contents = null
     return
 
-type.addMixins lotus._fileMixins
+type.addMixins lotus.fileMixins
 
 module.exports = File = type.build()
