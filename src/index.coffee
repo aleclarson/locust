@@ -28,7 +28,7 @@ loading = do ->
   {plugins, config} = lotus
 
   unless config.plugins
-    return Promise()
+    return Promise.resolve()
 
   unless Array.isArray config.plugins
     throw TypeError "'config.plugins' must be an Array!"

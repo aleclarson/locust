@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "LazyVar": "aleclarson/LazyVar#2.1.1",
-    "Promise": "aleclarson/Promise#2.1.1",
+    "Promise": "aleclarson/Promise#2.2.1",
     "Property": "aleclarson/Property#1.2.1",
     "ReactiveVar": "aleclarson/ReactiveVar#2.1.0",
     "Type": "aleclarson/Type#2.3.1",
