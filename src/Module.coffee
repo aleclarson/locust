@@ -1,18 +1,14 @@
 
-# TODO: Fix crash when renaming a module directory.
+# TODO: Support renaming a module directory.
 
-emptyFunction = require "emptyFunction"
-SortedArray = require "sorted-array"
 assertType = require "assertType"
 sortObject = require "sortObject"
 hasKeys = require "hasKeys"
 inArray = require "in-array"
 isType = require "isType"
 globby = require "globby"
-sync = require "sync"
 path = require "path"
 Type = require "Type"
-log = require "log"
 fs = require "fsx"
 
 type = Type "Lotus_Module"
@@ -88,9 +84,8 @@ type.defineMethods
         @_loading[name] = null
         throw error
 
-  # Find any files that belong to this module.
-  # Use the 'lotus-watch' plugin and call 'Module.watch' if
-  # you need to know about added/changed/deleted files.
+  # Crawl the root directory for files matching the pattern.
+  # For file watching, install `lotus-watch` and call the `watch` method on a `Module` instance.
   crawl: (pattern, options) ->
 
     if isType pattern, Object
@@ -103,9 +98,9 @@ type.defineMethods
     # If no pattern is specified, find the
     # compiled source files of this module.
     unless pattern
-      pattern = []
-      pattern[0] = @path + "/*.js"
-      pattern[1] = @dest + "/**/*.js" if @dest
+      pattern = [path.join @path, "*.js"]
+      if @dest isnt null
+        pattern.push path.join @dest, "**", "*.js"
 
     if Array.isArray pattern
 
@@ -124,10 +119,10 @@ type.defineMethods
 
     assertType pattern, String
 
-    if not path.isAbsolute pattern[0]
+    unless path.isAbsolute pattern[0]
       pattern = path.resolve @path, pattern
 
-    if not options.force
+    unless options.force
       return @_crawling[pattern] if @_crawling[pattern]
 
     if options.verbose
@@ -155,21 +150,19 @@ type.defineMethods
 
   saveConfig: ->
 
-    return unless @config
-
-    configPath = @path + "/package.json"
-
-    { dependencies, devDependencies } = @config
+    return unless config = @config
+    {dependencies, devDependencies} = config
 
     if hasKeys dependencies
-      @config.dependencies = sortObject dependencies
-    else delete @config.dependencies
+    then config.dependencies = sortObject dependencies
+    else delete config.dependencies
 
     if hasKeys devDependencies
-      @config.devDependencies = sortObject devDependencies
-    else delete @config.devDependencies
+    then config.devDependencies = sortObject devDependencies
+    else delete config.devDependencies
 
-    config = JSON.stringify @config, null, 2
+    config = JSON.stringify config, null, 2
+    configPath = path.join @path, "package.json"
     fs.writeFile configPath, config + log.ln
     return
 

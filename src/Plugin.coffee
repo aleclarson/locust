@@ -15,27 +15,27 @@ type.defineValues (name) ->
 
   name: name
 
+  # The object exported by the plugin.
   _loaded: null
 
 type.defineProperties
 
   _initModule: lazy: ->
     initModule = @_callHook "initModule"
-    if initModule
-      assertType initModule, Function
-      return initModule
-    return emptyFunction
+    return emptyFunction unless initModule
+    return initModule if initModule instanceof Function
+    throw TypeError "The '#{@name}' plugin failed to export an 'initModule' function!"
 
 type.defineGetters
 
   isLoaded: -> @_loaded isnt null
 
   dependencies: ->
-    return null if not @_loaded
+    return null unless @_loaded
     return @_loaded.dependencies or []
 
   globalDependencies: ->
-    return null if not @_loaded
+    return null unless @_loaded
     return @_loaded.globalDependencies or []
 
 type.defineMethods
@@ -61,15 +61,15 @@ type.defineMethods
 
   _callHook: (name, context, args) ->
 
-    if not @isLoaded
+    unless @isLoaded
       throw Error "Must call 'plugin.load' first!"
 
-    if hook = @_loaded[name]
-      assertType hook, Function
+    unless hook = @_loaded[name]
+      return null
+
+    if hook instanceof Function
       return hook.call context, args
 
-    return null
-
-
+    throw TypeError "The '#{@name}' plugin failed to export a '#{name}' function!"
 
 module.exports = Plugin = type.build()

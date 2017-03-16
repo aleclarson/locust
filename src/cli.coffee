@@ -4,17 +4,11 @@ module.exports = ->
   require "./global"
   require "./index"
 
-  timeStart = Date.now()
-  {exit} = process
-  process.exit = ->
-    log.onceFlushed ->
-      timeEnd = Date.now()
+  process.exit = do ->
+    exit = process.exit.bind process
+    return ->
       log.moat 1
-      log.gray.dim "Exiting after #{timeEnd - timeStart}ms..."
-      log.moat 1
-      log.flush()
-      exit.call process
-    return
+      log.onceFlushed exit
 
   log.indent = 2
   log.moat 1

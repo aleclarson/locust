@@ -3,7 +3,6 @@ assertType = require "assertType"
 isType = require "isType"
 path = require "path"
 Type = require "Type"
-log = require "log"
 fs = require "fsx"
 
 type = Type "Lotus_File"
@@ -29,11 +28,15 @@ type.defineValues (filePath, mod) ->
 
   _contents: null
 
+#
+# Prototype
+#
+
 type.defineGetters
 
   dest: ->
 
-    if not @dir.length
+    unless @dir.length
       return null
 
     # Test files are compiled on-the-fly.
