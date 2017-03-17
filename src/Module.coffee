@@ -80,6 +80,10 @@ type.defineMethods
     return file
 
   load: (names) ->
+
+    if isType names, String
+      names = [names]
+
     assertType names, Array
     Promise.chain names, (name) =>
 
