@@ -66,8 +66,16 @@ type.initInstance do ->
 type.defineMethods
 
   getFile: (filePath) ->
-    return file if file = @files[filePath]
-    return null unless mod = lotus.modules.resolve filePath
+
+    unless path.isAbsolute filePath
+      filePath = path.resolve @path, filePath
+
+    if file = @files[filePath]
+      return file
+
+    unless mod = lotus.modules.resolve filePath
+      return null
+
     @files[filePath] = file = lotus.File filePath, mod
     return file
 
