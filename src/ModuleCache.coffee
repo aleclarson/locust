@@ -24,7 +24,6 @@ type.defineMethods
 
   get: (modName, modPath) ->
     return mod if mod = @_modules[modName]
-    return null unless modPath
     mod = Module modName, modPath
     @_modules[modName] = mod
     return mod

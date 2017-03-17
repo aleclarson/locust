@@ -15,11 +15,11 @@ type = Type "Lotus_Module"
 
 type.defineArgs [String, String.Maybe]
 
-type.defineValues (name, path) ->
+type.defineValues (modName, modPath) ->
 
-  name: name
+  name: modName
 
-  path: path
+  path: modPath ? path.resolve lotus.path, modName
 
   files: Object.create null
 
