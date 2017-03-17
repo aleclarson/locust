@@ -13,13 +13,13 @@ fs = require "fsx"
 
 type = Type "Lotus_Module"
 
-type.defineArgs [String, String]
+type.defineArgs [String, String.Maybe]
 
-type.defineValues (name, path) ->
+type.defineValues (modName, modPath) ->
 
-  name: name
+  name: modName
 
-  path: path
+  path: modPath ? path.resolve lotus.path, modName
 
   files: Object.create null
 
@@ -66,12 +66,24 @@ type.initInstance do ->
 type.defineMethods
 
   getFile: (filePath) ->
-    return file if file = @files[filePath]
-    return null unless mod = lotus.modules.resolve filePath
+
+    unless path.isAbsolute filePath
+      filePath = path.resolve @path, filePath
+
+    if file = @files[filePath]
+      return file
+
+    unless mod = lotus.modules.resolve filePath
+      return null
+
     @files[filePath] = file = lotus.File filePath, mod
     return file
 
   load: (names) ->
+
+    if isType names, String
+      names = [names]
+
     assertType names, Array
     Promise.chain names, (name) =>
 

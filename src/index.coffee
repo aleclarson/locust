@@ -53,6 +53,9 @@ loading = do ->
     lotus.modules = require "./ModuleCache"
     return
 
+lotus.onInit = (callback) ->
+  loading.then callback
+
 lotus.run = (command, options = {}) ->
   assertType command, String
   assertType options, Object.Maybe
@@ -87,9 +90,12 @@ lotus.findModules = (root) ->
     b = b.name.toLowerCase()
     if a > b then 1 else -1
 
-  fs.readDir root
-  .forEach (modName) ->
-    try mod = lotus.modules.load modName
-    mods.insert mod if mod
+  return loading.then ->
 
-  .then -> mods.array
+    fs.readDir root
+    .forEach (modName) ->
+      try mod = lotus.modules.load modName
+      mods.insert mod if mod
+
+    return mods.array
+
