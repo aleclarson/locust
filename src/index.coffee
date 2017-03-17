@@ -53,6 +53,9 @@ loading = do ->
     lotus.modules = require "./ModuleCache"
     return
 
+lotus.onInit = (callback) ->
+  loading.then callback
+
 lotus.run = (command, options = {}) ->
   assertType command, String
   assertType options, Object.Maybe
