@@ -213,7 +213,8 @@ type.defineMethods
       @dest = @config.dest
 
     else if isType @config.main, String
-      @dest = path.dirname path.join @path, @config.main
+      dest = path.dirname path.join @path, @config.main
+      @dest = dest if dest isnt @path
     return
 
   _loadPlugins: ->
