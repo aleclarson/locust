@@ -73,11 +73,11 @@ type.defineMethods
     if file = @files[filePath]
       return file
 
-    unless mod = lotus.modules.resolve filePath
-      return null
+    if mod = lotus.modules.resolve filePath
+      @files[filePath] = file = lotus.File filePath, mod
+      return file
 
-    @files[filePath] = file = lotus.File filePath, mod
-    return file
+    return null
 
   getDest: (filePath, ext) ->
     {src, dest} = this
