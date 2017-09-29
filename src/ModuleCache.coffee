@@ -57,18 +57,13 @@ type.defineMethods
     then @_modules[config.name] or null
     else null
 
-  load: (modName) ->
+  load: (modPath) ->
 
-    if modName[0] is "."
-      modPath = path.resolve process.cwd(), modName
-      modName = path.basename modPath
+    if modPath[0] is "."
+      modPath = path.resolve modPath
 
-    else if path.isAbsolute modName
-      modPath = modName
-      modName = path.basename modPath
-
-    else
-      modPath = path.join lotus.path, modName
+    else unless path.isAbsolute modPath
+      modPath = path.resolve lotus.path, modPath
 
     unless fs.isDir modPath
       throw Error "Module path must be a directory: '#{modPath}'"
@@ -77,6 +72,7 @@ type.defineMethods
     unless fs.isFile configPath
       throw Error "Missing config file: '#{configPath}'"
 
-    return @get modName, modPath
+    config = require configPath
+    return @get config.name, modPath
 
 module.exports = type.construct()
