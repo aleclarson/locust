@@ -6,6 +6,8 @@ fs = require "fsx"
 
 Module = require "./Module"
 
+nodeModulesRE = /\/node_modules\//
+
 type = Type "ModuleCache"
 
 type.defineValues
@@ -29,12 +31,24 @@ type.defineMethods
     return mod
 
   resolve: (filePath) ->
-    packageRoot = filePath
-    loop
-      packageRoot = path.dirname packageRoot
-      packageJson = path.join packageRoot, "package.json"
-      break if fs.exists packageJson
-    return @_modules[path.basename packageRoot]
+    root = filePath
+    while root isnt "/"
+      root = path.dirname root
+      configPath = path.join root, "package.json"
+      break if fs.exists configPath
+
+    # No 'package.json' was found.
+    return null if root is "/"
+
+    # Avoid resolving `node_modules` that are not symlinks.
+    if nodeModulesRE.test configPath
+      unless fs.isLink path.dirname configPath
+        return null
+
+    config = require configPath
+    if config.name
+    then @_modules[config.name]
+    else null
 
   load: (modName) ->
 
