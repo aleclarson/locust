@@ -14,6 +14,12 @@ type.defineValues
 
   _modules: Object.create null
 
+  _length: 0
+
+type.defineGetters
+
+  length: -> @_length
+
 type.defineMethods
 
   has: (modName) ->
@@ -28,6 +34,7 @@ type.defineMethods
     return mod if mod = @_modules[modName]
     mod = Module modName, modPath
     @_modules[modName] = mod
+    @_length += 1
     return mod
 
   resolve: (filePath) ->
