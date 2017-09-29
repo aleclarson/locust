@@ -133,21 +133,27 @@ type.defineMethods
     if path.isAbsolute pattern
       throw Error "`pattern` must be relative"
 
-    unless options.force
-      return @_crawling[pattern] if @_crawling[pattern]
+    cacheId = pattern
+    if ignored = options.ignore
+      cacheId += ", i: "
+      ignored =
+        if Array.isArray ignored
+        then ignored.slice()
+        else ignored.split /\s*\,\s*/
+      cacheId += ignored.sort().join ", "
 
-    if options.verbose
-      log.moat 1
-      log.white "crawl "
-      log.cyan lotus.relative pattern
-      log.moat 1
+    else if options.ignored
+      throw Error "Invalid option: `ignored`\nAre you looking for `ignore`?"
+
+    unless options.force
+      return @_crawling[cacheId] if @_crawling[cacheId]
 
     pattern = path.resolve @path, pattern
-    @_crawling[pattern] =
+    @_crawling[cacheId] =
 
       globby pattern,
-        nodir: yes,
-        ignore: options.ignore
+        ignore: ignored
+        nodir: yes
 
       .then (filePaths) => # TODO: Handle cancellation properly.
         files = []
@@ -157,7 +163,7 @@ type.defineMethods
         return files
 
       .fail (error) =>
-        delete @_crawling[pattern]
+        delete @_crawling[cacheId]
         throw error
 
   saveConfig: ->
