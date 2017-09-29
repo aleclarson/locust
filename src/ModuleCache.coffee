@@ -47,7 +47,7 @@ type.defineMethods
 
     config = require configPath
     if config.name
-    then @_modules[config.name]
+    then @_modules[config.name] or null
     else null
 
   load: (modName) ->
