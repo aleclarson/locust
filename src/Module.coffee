@@ -130,9 +130,8 @@ type.defineMethods
         return results
 
     assertType pattern, String
-
-    unless path.isAbsolute pattern[0]
-      pattern = path.resolve @path, pattern
+    if path.isAbsolute pattern
+      throw Error "`pattern` must be relative"
 
     unless options.force
       return @_crawling[pattern] if @_crawling[pattern]
@@ -143,6 +142,7 @@ type.defineMethods
       log.cyan lotus.relative pattern
       log.moat 1
 
+    pattern = path.resolve @path, pattern
     @_crawling[pattern] =
 
       globby pattern,
