@@ -1,6 +1,6 @@
 {
   "name": "lotus",
-  "version": "4.0.1",
+  "version": "4.1.0",
   "main": "js/index",
   "bin": {
     "lotus": "bin/lotus"
