@@ -240,7 +240,8 @@ type.defineMethods
       plugin.initModule this
 
     plugins = Array.from plugins
-    Promise.all plugins, (name) ->
+    Promise.all plugins, (name) =>
+      name = path.resolve @path, name if name[0] is "."
       lotus.plugins.load name, loader
 
 type.addMixins lotus.moduleMixins
