@@ -73,11 +73,20 @@ type.defineMethods
     if file = @files[filePath]
       return file
 
-    unless mod = lotus.modules.resolve filePath
-      return null
+    if mod = lotus.modules.resolve filePath
+      @files[filePath] = file = lotus.File filePath, mod
+      return file
 
-    @files[filePath] = file = lotus.File filePath, mod
-    return file
+    return null
+
+  getDest: (filePath, ext) ->
+    {src, dest} = this
+    return null unless src and dest
+    return null unless filePath.startsWith src
+    dir = path.relative src, path.dirname filePath
+    name = path.basename filePath
+    name = name.replace path.extname(filePath), ext if ext
+    return path.join dest, dir, name
 
   load: (names) ->
 
@@ -130,24 +139,30 @@ type.defineMethods
         return results
 
     assertType pattern, String
+    if path.isAbsolute pattern
+      throw Error "`pattern` must be relative"
 
-    unless path.isAbsolute pattern[0]
-      pattern = path.resolve @path, pattern
+    cacheId = pattern
+    if ignored = options.ignore
+      cacheId += ", i: "
+      ignored =
+        if Array.isArray ignored
+        then ignored.slice()
+        else ignored.split /\s*\,\s*/
+      cacheId += ignored.sort().join ", "
+
+    else if options.ignored
+      throw Error "Invalid option: `ignored`\nAre you looking for `ignore`?"
 
     unless options.force
-      return @_crawling[pattern] if @_crawling[pattern]
+      return @_crawling[cacheId] if @_crawling[cacheId]
 
-    if options.verbose
-      log.moat 1
-      log.white "crawl "
-      log.cyan lotus.relative pattern
-      log.moat 1
-
-    @_crawling[pattern] =
+    pattern = path.resolve @path, pattern
+    @_crawling[cacheId] =
 
       globby pattern,
-        nodir: yes,
-        ignore: options.ignore
+        ignore: ignored
+        nodir: yes
 
       .then (filePaths) => # TODO: Handle cancellation properly.
         files = []
@@ -157,7 +172,7 @@ type.defineMethods
         return files
 
       .fail (error) =>
-        delete @_crawling[pattern]
+        delete @_crawling[cacheId]
         throw error
 
   saveConfig: ->
@@ -213,7 +228,8 @@ type.defineMethods
       @dest = @config.dest
 
     else if isType @config.main, String
-      @dest = path.dirname path.join @path, @config.main
+      dest = path.dirname path.join @path, @config.main
+      @dest = dest if dest isnt @path
     return
 
   _loadPlugins: ->
@@ -233,7 +249,8 @@ type.defineMethods
       plugin.initModule this
 
     plugins = Array.from plugins
-    Promise.all plugins, (name) ->
+    Promise.all plugins, (name) =>
+      name = path.resolve @path, name if name[0] is "."
       lotus.plugins.load name, loader
 
 type.addMixins lotus.moduleMixins
