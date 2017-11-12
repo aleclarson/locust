@@ -34,24 +34,7 @@ type.defineValues (filePath, mod) ->
 
 type.defineGetters
 
-  dest: ->
-
-    unless @dir.length
-      return null
-
-    # Test files are compiled on-the-fly.
-    if @module.spec and @path.startsWith @module.spec
-      return null
-
-    if @module.src and @path.startsWith @module.src
-      src = @module.src
-      dest = @module.dest
-
-    unless src and dest
-      return null
-
-    parents = path.relative src, path.dirname @path
-    return path.join dest, parents, @name + ".js"
+  dest: -> @module.getDest @path, ".js"
 
 type.defineMethods
 

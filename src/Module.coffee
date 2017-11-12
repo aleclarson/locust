@@ -79,6 +79,15 @@ type.defineMethods
     @files[filePath] = file = lotus.File filePath, mod
     return file
 
+  getDest: (filePath, ext) ->
+    {src, dest} = this
+    return null unless src and dest
+    return null unless filePath.startsWith src
+    dir = path.relative src, path.dirname filePath
+    name = path.basename filePath
+    name = name.replace path.extname(filePath), ext if ext
+    return path.join dest, dir, name
+
   load: (names) ->
 
     if isType names, String
