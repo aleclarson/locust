@@ -1,0 +1,24 @@
+[submodule "lotus-babel"]
+        path = packages/lotus-babel
+        url = https://github.com/aleclarson/lotus-babel.git
+[submodule "lotus-bundler"]
+        path = packages/lotus-bundler
+        url = https://github.com/aleclarson/lotus-bundler.git
+[submodule "lotus-coffee"]
+        path = packages/lotus-coffee
+        url = https://github.com/aleclarson/lotus-coffee.git
+[submodule "lotus-jasmine"]
+        path = packages/lotus-jasmine
+        url = https://github.com/aleclarson/lotus-jasmine.git
+[submodule "lotus-lab"]
+        path = packages/lotus-lab
+        url = https://github.com/aleclarson/lotus-lab.git
+[submodule "lotus-require"]
+        path = packages/lotus-require
+        url = https://github.com/aleclarson/lotus-require.git
+[submodule "lotus-runner"]
+        path = packages/lotus-runner
+        url = https://github.com/aleclarson/lotus-runner.git
+[submodule "lotus-watch"]
+        path = packages/lotus-watch
+        url = https://github.com/aleclarson/lotus-watch.git
