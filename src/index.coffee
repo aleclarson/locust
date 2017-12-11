@@ -85,7 +85,7 @@ lotus.findModules = (root) ->
   unless fs.isDir root
     throw Error "Expected a directory: '#{root}'"
 
-  mods = SortedArray [], (a, b) ->
+  mods = new SortedArray (a, b) ->
     a = a.name.toLowerCase()
     b = b.name.toLowerCase()
     if a > b then 1 else -1
@@ -98,4 +98,3 @@ lotus.findModules = (root) ->
       mods.insert mod if mod
 
     return mods.array
-
