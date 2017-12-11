@@ -1,0 +1,33 @@
+{
+  "name": "lotus",
+  "version": "4.1.1",
+  "main": "js/index",
+  "bin": {
+    "lotus": "bin/lotus"
+  },
+  "dependencies": {
+    "LazyVar": "aleclarson/LazyVar#2.2.1",
+    "Promise": "aleclarson/Promise#2.2.5",
+    "ReactiveVar": "aleclarson/ReactiveVar#2.2.1",
+    "SortedArray": "aleclarson/SortedArray#1.0.0",
+    "Type": "aleclarson/Type#2.4.0",
+    "assertType": "aleclarson/assertType#2.0.2",
+    "define": "aleclarson/define#1.0.2",
+    "emptyFunction": "aleclarson/emptyFunction#1.0.0",
+    "find-dependency": "aleclarson/find-dependency#1.1.0",
+    "fsx": "aleclarson/fsx#1.3.1",
+    "globby": "aleclarson/globby#4.0.1",
+    "has": "aleclarson/has#1.0.0",
+    "hasKeys": "aleclarson/hasKeys#1.0.0",
+    "in-array": "aleclarson/in-array#1.0.0",
+    "isDev": "aleclarson/isDev#3.0.0",
+    "isObject": "aleclarson/isObject#1.0.0",
+    "isType": "aleclarson/isType#1.0.2",
+    "log": "aleclarson/log#2.2.1",
+    "lotus-require": "aleclarson/lotus-require#3.1.1",
+    "minimist": "1.2.0",
+    "sortObject": "aleclarson/sortObject#1.0.3",
+    "steal": "aleclarson/steal#1.2.0",
+    "sync": "aleclarson/sync#1.0.3"
+  }
+}
