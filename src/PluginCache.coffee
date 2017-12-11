@@ -1,6 +1,7 @@
 
+findDependency = require "find-dependency"
 assertType = require "assertType"
-isType = require "isType"
+isObject = require "isObject"
 Type = require "Type"
 
 Plugin = require "./Plugin"
@@ -40,9 +41,14 @@ type.defineMethods
 
     plugin = @get name
     promise = promise.then =>
-
-      loaded = plugin._loaded or @_load plugin
       deps = []
+
+      unless loaded = plugin._loaded
+        try loaded = @_load plugin
+        catch error
+          if error.code is 404
+            return log.warn "Plugin does not exist: '#{plugin.name}'"
+          throw error
 
       # The `globalDependencies` property is only used by non-global loaders.
       unless options.global or not Array.isArray loaded.globalDependencies
@@ -74,15 +80,14 @@ type.defineMethods
       return
 
   _load: (plugin) ->
-    {name} = plugin
 
-    unless lotus.isFile name
-      throw Error "The '#{name}' plugin does not exist!"
+    unless pluginPath = findDependency plugin.name
+      throw do -> e = Error(); e.code = 404; e
 
-    loaded = require name
+    loaded = require pluginPath
 
-    unless isType loaded, Object
-      throw TypeError "The '#{name}' plugin failed to export an object!"
+    unless isObject loaded
+      throw TypeError "Expected an object export"
 
     plugin._loaded = loaded
     return loaded
