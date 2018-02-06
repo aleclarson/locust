@@ -3,6 +3,8 @@ findDependency = require "find-dependency"
 assertType = require "assertType"
 isObject = require "isObject"
 Type = require "Type"
+path = require "path"
+fs = require "fsx"
 
 Plugin = require "./Plugin"
 
@@ -80,8 +82,7 @@ type.defineMethods
       return
 
   _load: (plugin) ->
-
-    unless pluginPath = findDependency plugin.name
+    unless pluginPath = resolvePlugin plugin.name
       throw do -> e = Error(); e.code = 404; e
 
     loaded = require pluginPath
@@ -93,3 +94,8 @@ type.defineMethods
     return loaded
 
 module.exports = type.construct()
+
+resolvePlugin = (name) ->
+  unless path.isAbsolute name
+    return findDependency name
+  return name if fs.exists name
