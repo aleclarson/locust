@@ -239,7 +239,7 @@ type.defineMethods
 
     plugins = new Set
 
-    if names = @config.plugins
+    if names = @config.lotus or @config.plugins
       plugins.add name for name in names
 
     for name in lotus.modulePlugins
